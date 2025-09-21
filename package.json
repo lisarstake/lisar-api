@@ -1,0 +1,20 @@
+{
+  "name": "lisar-api",
+  "version": "1.0.0",
+  "description": "handling fiat onramp, wallet management, and delegation for LISAR",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}
