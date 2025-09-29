@@ -164,6 +164,66 @@ export class AuthService {
       };
     }
   }
+
+  /**
+   * Get Google OAuth URL
+   */
+  async getGoogleOAuthUrl(): Promise<{ url: string | null; error: AuthError | null }> {
+    if (!supabase) {
+      return {
+        url: null,
+        error: new AuthError('Supabase client not initialized') as AuthError
+      };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: process.env.GOOGLE_REDIRECT_URI
+        }
+      });
+
+      return {
+        url: data.url || null,
+        error: error as AuthError | null
+      };
+    } catch (err) {
+      return {
+        url: null,
+        error: new AuthError(err instanceof Error ? err.message : 'Unknown error') as AuthError
+      };
+    }
+  }
+
+  /**
+   * Handle Google OAuth callback
+   */
+  async handleGoogleCallback(code: string): Promise<AuthResponse> {
+    if (!supabase) {
+      return {
+        user: null,
+        session: null,
+        error: new AuthError('Supabase client not initialized') as AuthError
+      };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+         console.log('Google OAuth callback data:', data);
+      return {
+        user: data.user,
+        session: data.session,
+        error: error as AuthError | null
+      };
+    } catch (err) {
+      return {
+        user: null,
+        session: null,
+        error: new AuthError(err instanceof Error ? err.message : 'Unknown error') as AuthError
+      };
+    }
+  }
 }
 
 export const authService = new AuthService();

@@ -49,6 +49,7 @@ export class UserController {
           user: userWithWallet.supabaseUser,
           privy_user_id: userWithWallet.privyUser.id,
           wallet: userWithWallet.wallet,
+          session: userWithWallet.session, // Include session in the response
           note: !userWithWallet.supabaseUser.email_confirmed_at 
             ? 'Please check your email to confirm your account' 
             : undefined

@@ -172,4 +172,49 @@ router.post('/signout', authController.signOut.bind(authController));
  */
 router.get('/me', authController.getCurrentUser.bind(authController));
 
+/**
+ * @swagger
+ * /auth/google:
+ *   get:
+ *     summary: Redirect to Google OAuth for authentication
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirect to Google OAuth
+ */
+router.get('/google', authController.googleAuth.bind(authController));
+
+/**
+ * @swagger
+ * /auth/google/callback:
+ *   get:
+ *     summary: Handle Google OAuth callback
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Google OAuth successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Google OAuth successful
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 session:
+ *                   $ref: '#/components/schemas/Session'
+ *       400:
+ *         description: Google OAuth failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/google/callback', authController.googleAuthCallback.bind(authController));
+
 export default router;
