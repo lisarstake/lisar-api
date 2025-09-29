@@ -225,6 +225,73 @@ export class AuthController {
       });
     }
   }
+
+  /**
+   * Redirect to Google OAuth for authentication
+   * GET /auth/google
+   */
+  async googleAuth(req: Request, res: Response): Promise<void> {
+    try {
+      const { url, error } = await authService.getGoogleOAuthUrl();
+
+      if (error) {
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+       console.log('Redirecting to Google OAuth URL:', url);
+      res.redirect(url || '/');
+    } catch (error) {
+      console.error('Google Auth error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Handle Google OAuth callback
+   * GET /auth/google/callback
+   */
+  async googleAuthCallback(req: Request, res: Response): Promise<void> {
+    try {
+      const { code } = req.query;
+
+      if (!code) {
+        res.status(400).json({
+          success: false,
+          error: 'Authorization code is required'
+        });
+        return;
+      }
+
+      const { user, session, error } = await authService.handleGoogleCallback(code as string);
+
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: 'Google OAuth successful',
+        user,
+        session
+      });
+    } catch (error) {
+      console.error('Google Auth Callback error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }
 
 export const authController = new AuthController();

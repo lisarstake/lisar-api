@@ -19,6 +19,13 @@ export interface UserWithWallet {
     address: string;
     chain_type: string;
   };
+  session?: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    expires_at: number;
+    token_type: string;
+  } | null;
 }
 
 export class UserService {
@@ -37,6 +44,8 @@ export class UserService {
           data: userData
         }
       });
+
+      console.log( 'Session:', session, 'Error:', error);
 
       if (error || !supabaseUser) {
         throw new Error(`Failed to create Supabase user: ${error?.message}`);
@@ -60,7 +69,14 @@ export class UserService {
           id: wallet.id,
           address: wallet.address,
           chain_type: wallet.chain_type
-        } : undefined
+        } : undefined,
+        session: session ? {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_in: session.expires_in,
+          expires_at: session.expires_at || 0, // Default to 0 if undefined
+          token_type: session.token_type
+        } : null
       };
     } catch (error) {
       console.error('Error creating user with wallet:', error);
