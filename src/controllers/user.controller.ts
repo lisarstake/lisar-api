@@ -114,6 +114,70 @@ export class UserController {
       });
     }
   }
+
+  /**
+   * Get user profile
+   * GET /users/profile/:userId
+   */
+  async getUserProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+        return;
+      }
+
+      const userProfile = await userService.getUserProfile(userId);
+
+      res.status(200).json({
+        success: true,
+        data: userProfile
+      });
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Update user profile
+   * PATCH /users/profile/:userId
+   */
+  async updateUserProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const updates = req.body;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+        return;
+      }
+
+      const updatedProfile = await userService.updateUserProfile(userId, updates);
+
+      res.status(200).json({
+        success: true,
+        message: 'User profile updated successfully',
+        data: updatedProfile
+      });
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }
 
 export const userController = new UserController();

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { userController } from '../controllers/user.controller';
-
+import { verifyAuth } from '../middleware/verifyAuth';
 const router = Router();
 
 /**
@@ -124,5 +124,125 @@ router.post('/create-with-wallet', userController.createUserWithWallet.bind(user
  *                   example: Privy configuration not initialized
  */
 router.get('/test-privy', userController.testPrivyConnection.bind(userController));
+
+/**
+ * @swagger
+ * /users/profile/{userId}:
+ *   get:
+ *     summary: Get user profile by ID
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user to retrieve
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: User profile retrieved successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/profile/:userId',verifyAuth, userController.getUserProfile.bind(userController));
+
+/**
+ * @swagger
+ * /users/profile/{userId}:
+ *   patch:
+ *     summary: Update user profile by ID
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               full_name:
+ *                 type: string
+ *                 example: John Doe
+ *               img:
+ *                 type: string
+ *                 example: https://example.com/profile.jpg
+ *               DOB:
+ *                 type: string
+ *                 format: date
+ *                 example: 1990-01-01
+ *               country:
+ *                 type: string
+ *                 example: USA
+ *               state:
+ *                 type: string
+ *                 example: California
+ *               fiat_type:
+ *                 type: string
+ *                 example: USD
+ *               fiat_balance:
+ *                 type: number
+ *                 example: 1000
+ *               lpt_balance:
+ *                 type: number
+ *                 example: 50
+ *     responses:
+ *       200:
+ *         description: User profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: User profile updated successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.patch('/profile/:userId', verifyAuth, userController.updateUserProfile.bind(userController));
 
 export default router;
