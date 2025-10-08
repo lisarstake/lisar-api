@@ -13,9 +13,12 @@
     "@privy-io/node": "^0.1.0",
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^17.2.2",
+    "ethers": "^6.15.0",
     "express": "^5.1.0",
+    "graphql-request": "^7.2.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "viem": "^2.37.13"
   },
   "devDependencies": {
     "@types/dotenv": "^6.1.1",

@@ -1,0 +1,41 @@
+[
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "_amount", "type": "uint256" },
+      { "internalType": "address", "name": "_to", "type": "address" }
+    ],
+    "name": "bond",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "_amount", "type": "uint256" }
+    ],
+    "name": "unbond",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_transcoder", "type": "address" }
+    ],
+    "name": "getTranscoder",
+    "outputs": [
+      { "internalType": "uint256", "name": "lastRewardRound", "type": "uint256" },
+      { "internalType": "uint256", "name": "rewardCut", "type": "uint256" },
+      { "internalType": "uint256", "name": "feeShare", "type": "uint256" },
+      { "internalType": "uint256", "name": "lastActiveStakeUpdateRound", "type": "uint256" },
+      { "internalType": "uint256", "name": "activationRound", "type": "uint256" },
+      { "internalType": "uint256", "name": "deactivationRound", "type": "uint256" },
+      { "internalType": "uint256", "name": "activeCumulativeRewards", "type": "uint256" },
+      { "internalType": "uint256", "name": "cumulativeRewards", "type": "uint256" },
+      { "internalType": "uint256", "name": "cumulativeFees", "type": "uint256" },
+      { "internalType": "uint256", "name": "lastFeeRound", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
