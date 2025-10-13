@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { delegationService } from '../services/delegation.service';
-import { livepeerService } from '../contracts/services/livepeer.service';
+import { livepeerService } from '../protocols/services/livepeer.service';
 
 class DelegationController {
   async getDelegations(req: Request, res: Response): Promise<void> {
@@ -110,11 +110,11 @@ class DelegationController {
       const authorizationToken = req.headers.authorization?.split(' ')[1];
 
       if (!walletId || !walletAddress || !amount) {
-        return res.status(400).json({ error: 'Missing required fields' });
+        return res.status(400).json({ success: false,error: 'Missing required fields' });
       }
 
       if (!authorizationToken) {
-        return res.status(401).json({ error: 'Authorization token is required' });
+        return res.status(401).json({success: false, error: 'Authorization token is required' });
       }
 
       const result = await livepeerService.undelegate(
@@ -125,13 +125,13 @@ class DelegationController {
       );
 
       if (result.success) {
-        return res.status(200).json({ txHash: result.txHash });
+        return res.status(200).json({ success:true ,txHash: result.txHash });
       } else {
-        return res.status(500).json({ error: result.error });
+        return res.status(500).json({ success: false,error: result.error });
       }
     } catch (error: any) {
       console.error('Error in undelegate controller:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
 }

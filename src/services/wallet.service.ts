@@ -1,5 +1,5 @@
 import { createPublicClient, http, parseUnits, erc20Abi } from 'viem';
-import { arbitrumOne, LIVEPEER_CONTRACTS } from '../contracts/config/livepeer.config';
+import { arbitrumOne, LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
 
 
 export class WalletService {

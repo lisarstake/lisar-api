@@ -3,7 +3,7 @@ import { PrivyUser, PrivyWallet, CreateUserRequest, CreateWalletRequest } from '
 import { createViemAccount } from '@privy-io/node/viem';
 import { createWalletClient, Hex, http, parseEther } from 'viem';
 import { base } from 'viem/chains';
-import { arbitrumOne } from '../../contracts/config/livepeer.config';
+import { arbitrumOne } from '../../protocols/config/livepeer.config';
 
 
 
