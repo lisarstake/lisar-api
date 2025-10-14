@@ -158,7 +158,8 @@ const options = {
   definition: swaggerDefinition,
   apis: [
     './src/routes/*.ts',
-    './src/controllers/*.ts'
+    './src/controllers/*.ts',
+    './src/admin/routes/*.ts'
   ]
 };
 

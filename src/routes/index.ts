@@ -7,6 +7,7 @@ import delegationRoutes from './delegation.routes';
 import walletRoutes from './wallet.routes';
 import webhookRoutes from './webhook.routes';
 import transactionRoutes from './transaction.routes';
+import adminRoutes from '../admin/routes';
 
 const router = Router();
 
@@ -26,5 +27,8 @@ router.use('/wallet', walletRoutes);
 
 // Mount transaction routes
 router.use('/transactions', transactionRoutes);
+
+// Mount admin routes
+router.use('/admin', adminRoutes);
 
 export default router;
