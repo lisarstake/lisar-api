@@ -1,7 +1,7 @@
 import { privyClient } from '../../config/privy';
 import { PrivyUser, PrivyWallet, CreateUserRequest, CreateWalletRequest } from '../../types/privy.types';
 import { createViemAccount } from '@privy-io/node/viem';
-import { createWalletClient, Hex, http, parseEther } from 'viem';
+import { createWalletClient, Hex, http, parseEther,encodeFunctionData } from 'viem';
 import { base } from 'viem/chains';
 import { arbitrumOne } from '../../protocols/config/livepeer.config';
 
@@ -124,11 +124,14 @@ export class PrivyService {
   /**
    * Send a transaction using a Privy wallet
    */
-  async sendTransactionWithPrivyWallet(
+  async sendTransactionWithPrivyWalletGasSponsor(
     walletId: string,
-    address: Hex,
-    to: Hex,
-    value: string
+    address: `0x${string}`,
+    contractAddress: `0x${string}`,
+    abi: any,
+    functionName: string,
+    args: any[],
+    userJwt: string
   ): Promise<string> {
     try {
       if (!privyClient) {
@@ -139,6 +142,9 @@ export class PrivyService {
       const account = await createViemAccount(privyClient, {
         walletId,
         address,
+        authorizationContext: {
+           user_jwts: [userJwt],
+         },
       });
 
       // Initialize the viem WalletClient
@@ -147,13 +153,19 @@ export class PrivyService {
         chain: arbitrumOne, // Replace with your desired network
         transport: http(),
       });
-
+      const data = encodeFunctionData({
+            abi,
+            functionName,
+            args,
+        });
       client.writeContract
       // Send the transaction
       const hash = await client.sendTransaction({
-        to,
-        value: parseEther(value),
-      });
+          to: contractAddress,
+          data, // encoded function call
+          chain_id: 8453,
+          sponsor: true,
+       });
 
       return hash;
     } catch (error) {

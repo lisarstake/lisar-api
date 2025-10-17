@@ -25,7 +25,7 @@ export class LivepeerService {
       const userJwt = authorizationToken;
 
       // Step 1: Approve the Livepeer Bonding Manager contract to spend tokens
-      const approveTxHash = await privyService.writeToContractWithPrivyWallet(
+      const approveTxHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
         walletId,
         walletAddress,
         LIVEPEER_CONTRACTS.arbitrum.token as Hex,
@@ -38,7 +38,7 @@ export class LivepeerService {
       console.log('Approve transaction hash:', approveTxHash);
 
       // Step 2: Bond tokens to the orchestrator
-      const bondTxHash = await privyService.writeToContractWithPrivyWallet(
+      const bondTxHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
         walletId,
         walletAddress,
         LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
