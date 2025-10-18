@@ -40,13 +40,13 @@ class DelegationController {
       );
 
       if (result.success) {
-        return res.status(200).json({ txHash: result.txHash });
+        return res.status(200).json({ success: true, txHash: result.txHash });
       } else {
-        return res.status(500).json({ error: result.error });
+        return res.status(500).json({ success: false, error: result.error });
       }
     } catch (error: any) {
       console.error('Error in delegation controller:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
 

@@ -54,7 +54,17 @@ export class AdminUserService {
 
       // Apply search filter
       if (filters.search) {
-        query = query.or(`privy_user_id.ilike.%${filters.search}%,wallet_address.ilike.%${filters.search}%,user_id.ilike.%${filters.search}%`);
+        const search = String(filters.search).trim();
+        const uuidRegex = /^[0-9a-fA-F\-]{36}$/;
+        const isUuid = uuidRegex.test(search);
+
+        if (isUuid) {
+          // If the search looks like a UUID, use exact equality on uuid columns and ilike on wallet_address
+          query = query.or(`privy_user_id.eq.${search},user_id.eq.${search},wallet_address.ilike.%${search}%`);
+        } else {
+          // Otherwise search text columns only (avoid ilike on uuid columns which Postgres rejects)
+          query = query.or(`wallet_address.ilike.%${search}%,wallet_id.ilike.%${search}%,privy_user_id.eq.${search}`);
+        }
       }
 
       // Apply status filter
@@ -110,12 +120,14 @@ export class AdminUserService {
         return { success: false, error: 'Database connection not available' };
       }
 
+      const uid = userId?.trim();
+
       // Get user details
       const { data: user, error: userError } = await supabase
         .from('users')
         .select('*')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', uid)
+        .maybeSingle();
 
       if (userError) {
         console.error('Error fetching user:', userError);
@@ -130,7 +142,7 @@ export class AdminUserService {
       const { data: transactions, error: txError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', uid)
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -172,6 +184,8 @@ export class AdminUserService {
         return { success: false, error: 'Database connection not available' };
       }
 
+      const uid = userId?.trim();
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -180,7 +194,7 @@ export class AdminUserService {
           suspended_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('user_id', userId);
+        .eq('user_id', uid);
 
       if (error) {
         console.error('Error suspending user:', error);
@@ -209,6 +223,8 @@ export class AdminUserService {
         return { success: false, error: 'Database connection not available' };
       }
 
+      const uid = userId?.trim();
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -217,7 +233,7 @@ export class AdminUserService {
           suspended_at: null,
           updated_at: new Date().toISOString()
         })
-        .eq('user_id', userId);
+        .eq('user_id', uid);
 
       if (error) {
         console.error('Error unsuspending user:', error);
@@ -247,12 +263,14 @@ export class AdminUserService {
         return { success: false, error: 'Database connection not available' };
       }
 
+      const uid = userId?.trim();
+
       // Get current balance first
       const { data: user, error: getUserError } = await supabase
         .from('users')
         .select('lpt_balance')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', uid)
+        .maybeSingle();
 
       if (getUserError) {
         console.error('Error fetching user balance:', getUserError);
@@ -268,7 +286,7 @@ export class AdminUserService {
           lpt_balance: newBalance,
           updated_at: new Date().toISOString()
         })
-        .eq('user_id', userId);
+        .eq('user_id', uid);
 
       if (error) {
         console.error('Error updating user balance:', error);

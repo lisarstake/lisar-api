@@ -3,6 +3,8 @@ import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
 import { adminAuth } from '../middleware/admin.middleware';
 import { adminLogin, createAdmin } from '../controllers/auth.controller';
+import dashboardRoutes from './dashboard.routes';
+import validatorRoutes from './validator.routes';
 
 const router = Router();
 
@@ -204,6 +206,12 @@ router.post('/create', createAdmin);
 
 // Mount user management routes
 router.use('/users', userRoutes);
+
+// Mount dashboard routes
+router.use('/dashboard', dashboardRoutes);
+
+// Mount validator routes
+router.use('/validators', validatorRoutes);
 
 // Mount transaction management routes  
 router.use('/transactions', transactionRoutes);
