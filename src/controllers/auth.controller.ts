@@ -233,7 +233,7 @@ export class AuthController {
   async googleAuth(req: Request, res: Response): Promise<void> {
     try {
       const { url, error } = await authService.getGoogleOAuthUrl();
-
+      console.log('Google OAuth URL:', url);
       if (error) {
         res.status(500).json({
           success: false,
@@ -241,8 +241,11 @@ export class AuthController {
         });
         return;
       }
-       console.log('Redirecting to Google OAuth URL:', url);
-      res.redirect(url || '/');
+   
+       res.json({
+        success: true,
+        url
+      });
     } catch (error) {
       console.error('Google Auth error:', error);
       res.status(500).json({
@@ -259,7 +262,7 @@ export class AuthController {
   async googleAuthCallback(req: Request, res: Response): Promise<void> {
     try {
       const { code } = req.query;
-
+       console.log('Received Google OAuth callback with code:', code);
       if (!code) {
         res.status(400).json({
           success: false,
@@ -292,6 +295,60 @@ export class AuthController {
       });
     }
   }
+
+  /**
+   * Send password reset email (forgot password)
+   * POST /auth/forgot-password
+   */
+  async sendPasswordReset(req: Request, res: Response): Promise<void> {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        res.status(400).json({ success: false, error: 'Email is required' });
+        return;
+      }
+
+      const result = await authService.sendPasswordResetEmail(email);
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error || 'Failed to send reset email' });
+        return;
+      }
+
+      res.json({ success: true, message: 'Password reset email sent' });
+    } catch (error) {
+      console.error('Send password reset error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Reset password using reset token
+   * POST /auth/reset-password
+   */
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      // Allow token in body or in header (x-reset-token) or Authorization: Bearer <token>
+       const accessToken = req.headers.authorization?.split(' ')[1];
+       const { newPassword } = req.body;
+
+      if (!accessToken || !newPassword) {
+        res.status(400).json({ success: false, error: 'accessToken (body or x-reset-token header or Authorization header) and newPassword are required' });
+        return;
+      }
+
+      const { user, session, error } = await authService.resetPassword(accessToken, newPassword);
+      if (error) {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
+
+      res.json({ success: true, message: 'Password reset successful', user, session });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
 }
 
 export const authController = new AuthController();

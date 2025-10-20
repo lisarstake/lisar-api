@@ -1,11 +1,17 @@
 import { privyClient } from '../../config/privy';
 import { PrivyUser, PrivyWallet, CreateUserRequest, CreateWalletRequest } from '../../types/privy.types';
 import { createViemAccount } from '@privy-io/node/viem';
-import { createWalletClient, Hex, http, parseEther,encodeFunctionData } from 'viem';
+import { createWalletClient, Hex, http, parseEther, encodeFunctionData, createPublicClient } from 'viem';
 import { base } from 'viem/chains';
 import { arbitrumOne } from '../../protocols/config/livepeer.config';
+import { formatContractError, isNonceTooLowError } from '../../utils/contractErrorFormatter';
 
 
+// public client for on-chain queries (used to fetch pending nonce)
+const publicClient = createPublicClient({
+  chain: arbitrumOne,
+  transport: http(),
+});
 
 export class PrivyService {
 
@@ -158,19 +164,51 @@ export class PrivyService {
             functionName,
             args,
         });
-      client.writeContract
-      // Send the transaction
-      const hash = await client.sendTransaction({
-          to: contractAddress,
-          data, // encoded function call
-          chain_id: 8453,
-          sponsor: true,
-       });
 
-      return hash;
-    } catch (error) {
-      console.error('Error sending transaction with Privy wallet:', error);
-      throw error;
+      const MAX_RETRIES = 3;
+      let lastErr: any = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // fetch latest pending nonce
+        const nonceBigInt = await publicClient.getTransactionCount({ address, blockTag: 'pending' });
+        const nonce = Number(nonceBigInt);
+
+        try {
+          console.debug(`Privy send attempt=${attempt} nonce=${nonce} to=${contractAddress}`);
+          const hash = await client.sendTransaction({
+            to: contractAddress,
+            data,
+            chain_id: 8453,
+            sponsor: true,
+            nonce,
+          });
+
+          return hash;
+        } catch (err: any) {
+          lastErr = err;
+          if (isNonceTooLowError(err) && attempt < MAX_RETRIES) {
+            console.warn(`Nonce-too-low detected (attempt ${attempt}). Retrying...`);
+            await new Promise((r) => setTimeout(r, 500 * attempt));
+            continue;
+          }
+
+          const formatted = formatContractError(err);
+          console.error('Privy tx error (userMessage):', formatted.userMessage);
+          console.error('Privy tx error (debug):', formatted.debug.full);
+          throw new Error(formatted.userMessage);
+        }
+      }
+
+      const formatted = formatContractError(lastErr);
+      console.error('Privy tx error (userMessage):', formatted.userMessage);
+      console.error('Privy tx error (debug):', formatted.debug.full);
+      throw new Error(formatted.userMessage);
+
+    } catch (error: any) {
+      const formatted = formatContractError(error);
+      console.error('Privy tx error (userMessage):', formatted.userMessage);
+      console.error('Privy tx error (debug):', formatted.debug.full);
+      throw new Error(formatted.userMessage);
     }
   }
 
@@ -207,18 +245,51 @@ export class PrivyService {
         transport: http(),
       });
 
-      // Write to the contract
-      const hash = await client.writeContract({
-        address: contractAddress,
-        abi,
-        functionName,
-        args,
-      });
+      const data = encodeFunctionData({ abi, functionName, args });
 
-      return hash;
-    } catch (error) {
-      console.error('Error writing to contract with Privy wallet:', error);
-      throw error;
+      const MAX_RETRIES = 3;
+      let lastErr: any = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const nonceBigInt = await publicClient.getTransactionCount({ address, blockTag: 'pending' });
+        const nonce = Number(nonceBigInt);
+
+        try {
+          console.debug(`Privy write attempt=${attempt} nonce=${nonce} to=${contractAddress}`);
+
+          const hash = await client.sendTransaction({
+            to: contractAddress,
+            data,
+            chain_id: 8453,
+            nonce,
+          });
+
+          return hash;
+        } catch (err: any) {
+          lastErr = err;
+          if (isNonceTooLowError(err) && attempt < MAX_RETRIES) {
+            console.warn(`Nonce-too-low detected (attempt ${attempt}). Retrying...`);
+            await new Promise((r) => setTimeout(r, 500 * attempt));
+            continue;
+          }
+
+          const formatted = formatContractError(err);
+          console.error('Privy write error (userMessage):', formatted.userMessage);
+          console.error('Privy write error (debug):', formatted.debug.full);
+          throw new Error(formatted.userMessage);
+        }
+      }
+
+      const formattedLast = formatContractError(lastErr);
+      console.error('Privy write error (userMessage):', formattedLast.userMessage);
+      console.error('Privy write error (debug):', formattedLast.debug.full);
+      throw new Error(formattedLast.userMessage);
+
+    } catch (error: any) {
+      const formatted = formatContractError(error);
+      console.error('Privy write error (userMessage):', formatted.userMessage);
+      console.error('Privy write error (debug):', formatted.debug.full);
+      throw new Error(formatted.userMessage);
     }
   }
 }
