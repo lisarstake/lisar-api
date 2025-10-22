@@ -4,6 +4,7 @@ import { supabase } from './config/supabase';
 import { swaggerSpec } from './config/swagger';
 import routes from './routes';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 // Load environment variables
 dotenv.config();
@@ -14,6 +15,21 @@ const PORT: number = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// CORS - allow frontend clients (adjust origins as needed)
+const allowedOrigins = [
+  process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+}));
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
