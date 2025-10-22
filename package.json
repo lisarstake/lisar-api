@@ -13,6 +13,7 @@
     "@privy-io/node": "^0.1.0",
     "@supabase/supabase-js": "^2.57.4",
     "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "ethers": "^6.15.0",
     "express": "^5.1.0",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
