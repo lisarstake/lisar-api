@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { authService } from '../services/auth.service';
+import { supabase } from '../config/supabase';
 
 export class AuthController {
   /**
@@ -281,11 +282,34 @@ export class AuthController {
         return;
       }
 
+      // Get wallet information for the user
+      let walletInfo = null;
+      if (user && supabase) {
+        try {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('wallet_id, wallet_address, privy_user_id')
+            .eq('user_id', user.id)
+            .single();
+          
+          if (userData) {
+            walletInfo = {
+              wallet_id: userData.wallet_id,
+              wallet_address: userData.wallet_address,
+              privy_user_id: userData.privy_user_id
+            };
+          }
+        } catch (walletError) {
+          console.error('Error fetching wallet info:', walletError);
+        }
+      }
+
       res.json({
         success: true,
         message: 'Google OAuth successful',
         user,
-        session
+        session,
+        wallet: walletInfo
       });
     } catch (error) {
       console.error('Google Auth Callback error:', error);
@@ -349,6 +373,31 @@ export class AuthController {
     }
   }
 
+  /**
+   * Refresh session using a refresh token
+   * POST /auth/refresh
+   */
+  async refreshSession(req: Request, res: Response): Promise<void> {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        res.status(400).json({ success: false, error: 'refreshToken is required' });
+        return;
+      }
+
+      const { user, session, error } = await authService.refreshSession(refreshToken);
+
+      if (error) {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
+
+      res.json({ success: true, user, session });
+    } catch (error) {
+      console.error('Refresh session error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
 }
 
 export const authController = new AuthController();

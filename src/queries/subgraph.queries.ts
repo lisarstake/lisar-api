@@ -236,3 +236,156 @@ export const GET_ENS_QUERY = `
     }
   }
 `;
+
+
+export const GET_PROFILE_INFO = `
+  query GetProfileInfo($id: String!) {
+    delegator(id: $id) {
+      bondedAmount
+      id
+      principal
+      unbonded
+      withdrawnFees
+      fees
+      startRound
+      unbondingLocks {
+        id
+        amount
+        unbondingLockId
+        withdrawRound
+        delegate {
+          id
+        }
+      }
+      delegate {
+        id
+        active
+        activationTimestamp
+        totalStake
+        serviceURI
+        transcoderDays(first: 1, orderBy: date, orderDirection: asc) {
+          id
+          volumeUSD
+          date
+          transcoder {
+            feeShare
+            rewardCut
+            rewardCutUpdateTimestamp
+            feeShareUpdateTimestamp
+            lastActiveStakeUpdateRound
+            active
+            totalStake
+            totalVolumeUSD
+            thirtyDayVolumeETH
+            sixtyDayVolumeETH
+            id
+            activationTimestamp
+            delegator {
+              bondedAmount
+              delegatedAmount
+              fees
+              principal
+              withdrawnFees
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+
+export const GET_ROUNDS_INFO = `
+  query GetRoundsInfo {
+    newRoundEvents(first: 1000, orderBy: timestamp, orderDirection: asc) {
+      round {
+        id
+        delegatorsCount
+        length
+        newStake
+        movedStake
+        numActiveTranscoders
+        participationRate
+        totalActiveStake
+        totalSupply
+      }
+      timestamp
+    }
+  }
+`;
+
+export const GET_PROTOCOL_STATS = `
+query GetProtocolStats {
+  protocols {
+    activeTranscoderCount
+    delegatorsCount
+    lptPriceEth
+    inflation
+    inflationChange
+    participationRate
+    targetBondingRate
+    roundLength
+    roundCount
+    totalSupply
+    totalActiveStake
+    totalVolumeUSD
+    unbondingPeriod
+    winningTicketCount
+    totalVolumeETH
+  }
+}
+`;
+
+export const GET_EVENTS = `
+  query GetEvents($id: String!) {
+    transactions(where: { from_contains: $id }) {
+      events(orderBy: timestamp, orderDirection: desc, first: 1000) {
+        __typename
+        round {
+          id
+        }
+        transaction {
+          id
+          timestamp
+          from
+        }
+        ... on BondEvent {
+          delegator {
+            id
+          }
+          newDelegate {
+            id
+          }
+          oldDelegate {
+            id
+          }
+          additionalAmount
+        }
+        ... on UnbondEvent {
+          delegate {
+            id
+          }
+          delegator {
+            id
+          }
+          amount
+        }
+        ... on RebondEvent {
+          delegate {
+            id
+          }
+          delegator {
+            id
+          }
+          amount
+        }
+        ... on RewardEvent {
+          delegate {
+            id
+          }
+          rewardTokens
+        }
+      }
+    }
+  }
+`;

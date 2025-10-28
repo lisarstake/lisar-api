@@ -208,6 +208,19 @@ router.get('/google', authController.googleAuth.bind(authController));
  *                   $ref: '#/components/schemas/User'
  *                 session:
  *                   $ref: '#/components/schemas/Session'
+ *                 wallet:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     wallet_id:
+ *                       type: string
+ *                       example: wallet_123
+ *                     wallet_address:
+ *                       type: string
+ *                       example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *                     privy_user_id:
+ *                       type: string
+ *                       example: privy_user_123
  *       400:
  *         description: Google OAuth failed
  *         content:
@@ -278,5 +291,54 @@ router.post('/forgot-password', authController.sendPasswordReset.bind(authContro
  *         description: Bad request
  */
 router.post('/reset-password', authController.resetPassword.bind(authController));
+
+/**
+ * @swagger
+ * /auth/refresh:
+ *   post:
+ *     summary: Refresh user session using refresh token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: The refresh token obtained from sign in
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Session refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 session:
+ *                   $ref: '#/components/schemas/Session'
+ *       400:
+ *         description: Bad request - Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/refresh', authController.refreshSession.bind(authController));
 
 export default router;

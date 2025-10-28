@@ -8,6 +8,7 @@ import walletRoutes from './wallet.routes';
 import webhookRoutes from './webhook.routes';
 import transactionRoutes from './transaction.routes';
 import adminRoutes from '../admin/routes';
+import protocolRoutes from './protocol.routes';
 
 const router = Router();
 
@@ -24,6 +25,10 @@ router.use('/webhooks', webhookRoutes);
 
 // Mount wallet routes
 router.use('/wallet', walletRoutes);
+
+
+// Protocol
+router.use('/protocol', protocolRoutes);
 
 // Mount transaction routes
 router.use('/transactions', transactionRoutes);

@@ -134,6 +134,158 @@ class DelegationController {
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
+
+  /**
+   * Handle withdrawing unbonded stake from Livepeer
+   */
+  async withdrawStake(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, unbondingLockId } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || unbondingLockId === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'walletId, walletAddress, and unbondingLockId are required'
+        });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+      }
+
+      const result = await livepeerService.withdrawStake(
+        walletId,
+        walletAddress,
+        parseInt(unbondingLockId),
+        authorizationToken
+      );
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          message: 'Successfully withdrew unbonded stake from Livepeer',
+          txHash: result.txHash
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error: any) {
+      console.error('Error in withdrawStake controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Handle withdrawing earned fees from Livepeer
+   */
+  async withdrawFees(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, amount } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || !amount) {
+        return res.status(400).json({
+          success: false,
+          error: 'walletId, walletAddress, and amount are required'
+        });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+      }
+
+      const result = await livepeerService.withdrawFees(
+        walletId,
+        walletAddress,
+        amount,
+        authorizationToken
+      );
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          message: 'Successfully withdrew fees from Livepeer',
+          txHash: result.txHash
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error: any) {
+      console.error('Error in withdrawFees controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get delegator onchain transactions (pending and completed)
+   */
+  async getDelegatorTransactions(req: Request, res: Response): Promise<Response> {
+    const { delegator } = req.params;
+
+    try {
+      const result = await delegationService.getDelegatorTransactions(delegator);
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in getDelegatorTransactions:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Get delegator rewards over rounds
+   */
+  async getDelegatorRewards(req: Request, res: Response): Promise<Response> {
+    const { delegator } = req.params;
+
+    try {
+      const result = await delegationService.getDelegatorRewards(delegator);
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in getDelegatorRewards:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }
 
 export const delegationController = new DelegationController();

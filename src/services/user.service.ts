@@ -13,6 +13,22 @@ export class UserService {
     full_name?: string;
   }): Promise<UserWithWallet> {
     try {
+      // Ensure Supabase client is initialized
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized. Please check your configuration.');
+      }
+
+      // Check if email already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('email')
+        .eq('email', email)
+        .single();
+
+      if (existingUser) {
+        throw new Error('Email already exists. Please use a different email address or sign in.');
+      }
+
       // Step 1: Create user in Supabase
       const { user: supabaseUser, session, error } = await authService.signUp({
         email,

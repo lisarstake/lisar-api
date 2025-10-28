@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
 import { AuthResponse, SignUpData, SignInData } from '../types/auth.types';
 import { AuthError, User, Session } from '@supabase/supabase-js';
+import { privyService } from '../integrations/privy/privy.service';
 
 export class AuthService {
   /**
@@ -114,7 +115,7 @@ export class AuthService {
   }
 
   /**
-   * Refresh the current session
+   * Refresh the current session using a refresh token
    */
   async refreshSession(refreshToken: string): Promise<AuthResponse> {
     if (!supabase) {
@@ -131,7 +132,7 @@ export class AuthService {
       });
 
       return {
-        user: data.user,
+        user: null,
         session: data.session,
         error: error as AuthError | null
       };
@@ -139,7 +140,7 @@ export class AuthService {
       return {
         user: null,
         session: null,
-        error: new AuthError(err instanceof Error ? err.message : 'Unknown error') as AuthError
+        error: new AuthError(err instanceof Error ? err.message : 'Failed to refresh session') as AuthError
       };
     }
   }
@@ -190,7 +191,62 @@ export class AuthService {
 
     try {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-         console.log('Google OAuth callback data:', error);
+      console.log('Google OAuth callback data:', error);
+      
+      if (error || !data.user || !data.session) {
+        return {
+          user: data.user,
+          session: data.session,
+          error: error as AuthError | null
+        };
+      }
+
+      // Check if this is a new user by looking for existing database record
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('user_id, privy_user_id, wallet_id')
+        .eq('user_id', data.user.id)
+        .maybeSingle();
+
+      // If user doesn't exist in our database, create Privy wallet
+      if (!existingUser) {
+        try {
+          console.log('New Google OAuth user detected, creating Privy wallet...');
+          
+          // Create user and wallet in Privy
+          const { user: privyUser, wallet } = await privyService.createUserWithWallet(data.user.id);
+          
+          // Insert user data into our database
+          const { error: dbError } = await supabase.from('users').insert({
+            user_id: data.user.id,
+            email: data.user.email,
+            privy_user_id: privyUser.id,
+            wallet_id: wallet?.id,
+            wallet_address: wallet?.address,
+            chain_type: wallet?.chain_type,
+            full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name,
+            img: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
+            DOB: null,
+            country: null,
+            state: null,
+            fiat_type: null,
+            fiat_balance: 0,
+            lpt_balance: 0,
+            created_date: new Date().toISOString()
+          });
+
+          if (dbError) {
+            console.error('Failed to insert user into database:', dbError);
+            // Don't fail the auth process, but log the error
+          } else {
+            console.log('Successfully created Privy wallet for Google OAuth user');
+          }
+        } catch (privyError) {
+          console.error('Failed to create Privy wallet for Google OAuth user:', privyError);
+          // Don't fail the auth process, but log the error
+        }
+      }
+
       return {
         user: data.user,
         session: data.session,
