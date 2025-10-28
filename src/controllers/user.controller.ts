@@ -60,34 +60,42 @@ export class UserController {
       
       // Handle specific error types
       if (error instanceof Error) {
+        if (error.message.includes('Email already exists')) {
+          res.status(409).json({
+            success: false,
+            error: error.message
+          });
+          return;
+        }
+
         if (error.message.includes('User already registered')) {
           res.status(409).json({
-            error: 'User already exists with this email',
-            success: false
+            success: false,
+            error: 'User already exists with this email'
           });
           return;
         }
         
         if (error.message.includes('Supabase user')) {
           res.status(400).json({
-            error: 'Failed to create user account',
-            success: false
+            success: false,
+            error: 'Failed to create user account'
           });
           return;
         }
         
         if (error.message.includes('Privy')) {
           res.status(500).json({
-            error: 'Failed to create wallet. User account created but wallet creation failed.',
-            success: false
+            success: false,
+            error: 'Failed to create wallet. User account created but wallet creation failed.'
           });
           return;
         }
       }
       
       res.status(500).json({
-        error: 'Internal server error',
-        success: false
+        success: false,
+        error: 'Internal server error'
       });
     }
   }

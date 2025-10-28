@@ -95,6 +95,81 @@ export class LivepeerService {
       return { success: false, error: error.message || 'Unknown error occurred' };
     }
   }
+
+  /**
+   * Withdraw unbonded stake from Livepeer using a Privy wallet
+   */
+  async withdrawStake(
+    walletId: string,
+    walletAddress: Hex,
+    unbondingLockId: number,
+    authorizationToken: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      if (!authorizationToken) {
+        throw new Error('Authorization token is missing');
+      }
+      console.log('here')
+
+      const userJwt = authorizationToken;
+
+      // Withdraw stake using unbonding lock ID
+      const withdrawTxHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
+        walletId,
+        walletAddress,
+        LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
+        bondingManagerAbi,
+        'withdrawStake',
+        [unbondingLockId],
+        userJwt
+      );
+
+      console.log('Withdraw stake transaction hash:', withdrawTxHash);
+
+      return { success: true, txHash: withdrawTxHash };
+    } catch (error: any) {
+      console.error('Error withdrawing stake:', error);
+      return { success: false, error: error.message || 'Unknown error occurred' };
+    }
+  }
+
+  /**
+   * Withdraw earned fees from Livepeer using a Privy wallet
+   */
+  async withdrawFees(
+    walletId: string,
+    walletAddress: Hex,
+    amount: string,
+    authorizationToken: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      const amountWei = ethers.parseEther(amount);
+
+      if (!authorizationToken) {
+        throw new Error('Authorization token is missing');
+      }
+
+      const userJwt = authorizationToken;
+
+      // Withdraw fees to the wallet address
+      const withdrawTxHash = await privyService.writeToContractWithPrivyWallet(
+        walletId,
+        walletAddress,
+        LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
+        bondingManagerAbi,
+        'withdrawFees',
+        [walletAddress, amountWei], // recipient address and amount
+        userJwt
+      );
+
+      console.log('Withdraw fees transaction hash:', withdrawTxHash);
+
+      return { success: true, txHash: withdrawTxHash };
+    } catch (error: any) {
+      console.error('Error withdrawing fees:', error);
+      return { success: false, error: error.message || 'Unknown error occurred' };
+    }
+  }
 }
 
 export const livepeerService = new LivepeerService();
