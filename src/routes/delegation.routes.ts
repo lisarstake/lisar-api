@@ -119,6 +119,30 @@ router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(d
  *                           withdrawRound:
  *                             type: string
  *                             example: "2900"
+ *                           roundsRemaining:
+ *                             type: number
+ *                             description: Number of rounds remaining until withdrawal is available
+ *                             example: 10
+ *                           hoursRemaining:
+ *                             type: number
+ *                             description: Total hours remaining until withdrawal is available
+ *                             example: 200
+ *                           daysRemaining:
+ *                             type: number
+ *                             description: Number of full days remaining
+ *                             example: 8
+ *                           remainingHours:
+ *                             type: number
+ *                             description: Remaining hours after full days
+ *                             example: 8
+ *                           timeRemainingFormatted:
+ *                             type: string
+ *                             description: Human-readable time remaining format
+ *                             example: "3 days remaining"
+ *                           estimatedAvailableDate:
+ *                             type: string
+ *                             description: ISO timestamp when withdrawal will be available
+ *                             example: "2025-11-06T12:00:00.000Z"
  *                     completedStakeTransactions:
  *                       type: array
  *                       description: Unbonding locks ready for withdrawal
@@ -137,6 +161,22 @@ router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(d
  *                           withdrawRound:
  *                             type: string
  *                             example: "2880"
+ *                           roundsRemaining:
+ *                             type: number
+ *                             description: Always 0 for completed transactions
+ *                             example: 0
+ *                           hoursRemaining:
+ *                             type: number
+ *                             description: Always 0 for completed transactions
+ *                             example: 0
+ *                           timeRemainingFormatted:
+ *                             type: string
+ *                             description: Status for completed transactions
+ *                             example: "Available now"
+ *                           estimatedAvailableDate:
+ *                             type: string
+ *                             description: Status for completed transactions
+ *                             example: "Available now"
  *       404:
  *         description: Delegator not found
  *         content:
@@ -250,93 +290,6 @@ router.get('/:delegator/transactions', verifyAuth, (req, res) => delegationContr
  *                   example: Internal server error
  */
 router.get('/:delegator/rewards', verifyAuth, (req, res) => delegationController.getDelegatorRewards(req, res));
-
-/**
- * @swagger
- * /delegation/{delegator}:
- *   get:
- *     summary: Get delegation details for a specific delegator
- *     tags: [Delegation]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: delegator
- *         required: true
- *         schema:
- *           type: string
- *         description: The delegator's address
- *         example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
- *     responses:
- *       200:
- *         description: Delegation details retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   description: Delegation details or null if no data is found
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Delegator address
- *                       example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
- *                     bondedAmount:
- *                       type: string
- *                       description: Amount of tokens bonded
- *                       example: "1000.5"
- *                     fees:
- *                       type: string
- *                       description: Accumulated fees
- *                       example: "50.25"
- *                     delegatedAmount:
- *                       type: string
- *                       description: Total delegated amount
- *                       example: "5000.0"
- *                     unbondingLocks:
- *                       type: array
- *                       description: Array of unbonding locks
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                             example: "1"
- *                           amount:
- *                             type: string
- *                             example: "100.0"
- *                           unbondingLockId:
- *                             type: number
- *                             example: 1
- *                           withdrawRound:
- *                             type: string
- *                             example: "2900"
- *                           delegate:
- *                             type: object
- *                             properties:
- *                               id:
- *                                 type: string
- *                                 example: 0x123d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
- *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 error:
- *                   type: string
- *                   example: Failed to fetch delegations
- */
-router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(delegationController));
 
 /**
  * @swagger
@@ -562,9 +515,9 @@ router.get('/orchestrators/:delegator', verifyAuth, delegationController.getDele
 
 /**
  * @swagger
- * /delegation/rewards/{delegator}/{transcoder}:
+ * /delegation/fees/{delegator}/{transcoder}:
  *   get:
- *     summary: Get pending rewards for a delegator from a specific transcoder
+ *     summary: Get pending ETH fees for a delegator from a specific transcoder
  *     tags: [Delegation]
  *     security:
  *       - bearerAuth: []
@@ -585,7 +538,7 @@ router.get('/orchestrators/:delegator', verifyAuth, delegationController.getDele
  *         example: 0x123d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
  *     responses:
  *       200:
- *         description: Successfully retrieved pending rewards
+ *         description: Successfully retrieved pending ETH fees
  *         content:
  *           application/json:
  *             schema:
@@ -596,8 +549,8 @@ router.get('/orchestrators/:delegator', verifyAuth, delegationController.getDele
  *                   example: true
  *                 rewards:
  *                   type: string
- *                   description: Pending rewards amount
- *                   example: "15.75"
+ *                   description: Pending ETH fees amount
+ *                   example: "0.025"
  *       404:
  *         description: Delegator not found
  *         content:
@@ -623,9 +576,92 @@ router.get('/orchestrators/:delegator', verifyAuth, delegationController.getDele
  *                   example: false
  *                 error:
  *                   type: string
- *                   example: Failed to fetch pending rewards
+ *                   example: Failed to fetch pending ETH fees
  */
-router.get('/rewards/:delegator/:transcoder', verifyAuth, delegationController.getPendingRewards.bind(delegationController));
+router.get('/fees/:delegator/:transcoder', verifyAuth, delegationController.getPendingFees.bind(delegationController));
+
+/**
+ * @swagger
+ * /delegation/stake-profile/{delegator}:
+ *   get:
+ *     summary: Get comprehensive stake profile for a delegator including lifetime statistics
+ *     tags: [Delegation]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: delegator
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The delegator's address
+ *         example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved stake profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     delegator:
+ *                       type: string
+ *                       description: The delegator's address
+ *                       example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *                     currentStake:
+ *                       type: string
+ *                       description: Current stake amount in ETH (from bondingManager contract)
+ *                       example: "1025.674"
+ *                     lifetimeStaked:
+ *                       type: string
+ *                       description: Total amount staked over lifetime (principal)
+ *                       example: "1000.0"
+ *                     lifetimeUnbonded:
+ *                       type: string
+ *                       description: Total amount unbonded over lifetime
+ *                       example: "100.0"
+ *                     lifetimeRewards:
+ *                       type: string
+ *                       description: Total lifetime rewards earned (calculated as currentStake - lifetimeStaked + lifetimeUnbonded)
+ *                       example: "125.674"
+ *                     pendingStakeWei:
+ *                       type: string
+ *                       description: Raw pending stake amount in wei
+ *                       example: "1025674000000000000000"
+ *       404:
+ *         description: Delegator not found or no stake profile available
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: No stake profile found for this delegator
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: Failed to fetch stake profile
+ */
+router.get('/stake-profile/:delegator', verifyAuth, (req, res) => delegationController.getStakeProfile(req, res));
 
 /**
  * @swagger
