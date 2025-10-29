@@ -1,6 +1,9 @@
 import { GraphQLClient } from 'graphql-request';
 import { GET_DELEGATOR_BY_ADDRESS_QUERY, GET_ALL_DELEGATIONS_QUERY, GET_BOND_EVENTS_QUERY, GET_PENDING_REWARDS_QUERY, GET_PROFILE_INFO, GET_EVENTS } from '../queries/subgraph.queries';
 import { protocolService } from './protocol.service';
+import { ethers } from 'ethers';
+import { arbitrumOne, LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
+import bondingManagerAbi from '../protocols/abis/livepeer/bondingManager.abi.json';
 
 export class DelegationService {
   private graphqlEndpoint: string;
@@ -99,7 +102,7 @@ export class DelegationService {
   }
 
   // Get pending rewards for a delegator from a specific transcoder
-  async getPendingRewards(delegatorAddress: string, transcoderAddress: string): Promise<{success: boolean, rewards?: string, error?: string}> {
+  async getPendingFees(delegatorAddress: string, transcoderAddress: string): Promise<{success: boolean, rewards?: string, error?: string}> {
     const query = GET_PENDING_REWARDS_QUERY;
 
     try {
@@ -154,19 +157,49 @@ export class DelegationService {
       const delegator = response.delegator;
       const unbondingLocks = delegator.unbondingLocks || [];
 
-      // Filter pending stake transactions (withdrawRound > currentRound)
-      const pendingStakeTransactions = unbondingLocks.filter(
-        (item: any) =>
-          item.withdrawRound &&
+      // Filter and enhance pending stake transactions (withdrawRound > currentRound)
+      const pendingStakeTransactions = unbondingLocks
+        .filter((item: any) => 
+          item.withdrawRound && 
           parseInt(item.withdrawRound, 10) > parseInt(currentRoundId, 10)
-      );
+        )
+        .map((item: any) => {
+          const withdrawRound = parseInt(item.withdrawRound, 10);
+          const currentRound = parseInt(currentRoundId, 10);
+          const daysRemaining = withdrawRound - currentRound;
+
+          // Create human-readable format
+          let timeRemainingFormatted = "";
+          if (daysRemaining > 1) {
+            timeRemainingFormatted = `${daysRemaining} days remaining`;
+          } else if (daysRemaining === 1) {
+            timeRemainingFormatted = "1 day remaining";
+          } else {
+            timeRemainingFormatted = "Less than 1 day remaining";
+          }
+
+          return {
+            ...item,
+            roundsRemaining: daysRemaining,
+            daysRemaining: daysRemaining,
+            timeRemainingFormatted,
+            estimatedAvailableDate: new Date(Date.now() + (daysRemaining * 24 * 60 * 60 * 1000)).toISOString()
+          };
+        });
 
       // Filter completed stake transactions (withdrawRound <= currentRound)
-      const completedStakeTransactions = unbondingLocks.filter(
-        (item: any) =>
+      const completedStakeTransactions = unbondingLocks
+        .filter((item: any) =>
           item.withdrawRound &&
           parseInt(item.withdrawRound, 10) <= parseInt(currentRoundId, 10)
-      );
+        )
+        .map((item: any) => ({
+          ...item,
+          roundsRemaining: 0,
+          daysRemaining: 0,
+          timeRemainingFormatted: "Available now",
+          estimatedAvailableDate: "Available now"
+        }));
 
       return {
         success: true,
@@ -202,7 +235,7 @@ export class DelegationService {
       const response = await this.client.request<{ transactions: any[] }>(query, {
         id: delegatorAddress.toLowerCase(),
       });
-       console.log(response.transactions,"response")
+      
       if (!response.transactions || response.transactions.length === 0) {
         return { success: false, error: "No transactions found for this delegator" };
       }
@@ -245,6 +278,64 @@ export class DelegationService {
     } catch (error) {
       console.error("Error fetching delegator rewards:", error);
       return { success: false, error: "Failed to fetch delegator rewards" };
+    }
+  }
+
+  // Get stake profile for a delegator using bondingManager contract and subgraph data
+  async getStakeProfile(delegatorAddress: string): Promise<{
+    success: boolean,
+    data?: {
+      delegator: string,
+      currentStake: string,
+      lifetimeStaked: string,
+      lifetimeUnbonded: string,
+      lifetimeRewards: string
+    },
+    error?: string
+  }> {
+    try {
+      // Get the RPC endpoint from environment
+      const rpcUrl = arbitrumOne.rpcUrls.default.http[0];
+      if (!rpcUrl) {
+        return { success: false, error: "RPC URL not configured" };
+      }
+
+      // Create provider and contract instance
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const contract = new ethers.Contract(LIVEPEER_CONTRACTS.arbitrum.proxy, bondingManagerAbi, provider);
+      
+      // Get profile data from subgraph
+      const profileQuery = GET_DELEGATOR_BY_ADDRESS_QUERY;
+      const profileResponse = await this.client.request<{ delegator: any }>(profileQuery, { 
+        address: delegatorAddress.toLowerCase() 
+      });
+
+      // Call pendingStake with endRound = 0 (current round)
+      const pendingStakeResult = await contract.pendingStake(delegatorAddress, 0);
+      
+      // Convert from wei to ETH units
+      const pendingStakeFormatted = ethers.formatEther(pendingStakeResult);
+
+      // Calculate additional values
+      const profileData = profileResponse;
+      const lifetimeStaked = parseFloat(profileData?.delegator?.principal || '0');
+      const lifetimeUnbonded = parseFloat(profileData?.delegator?.unbonded || '0');
+      const currentStake = pendingStakeResult ? parseFloat(pendingStakeFormatted) : 0;
+      const lifetimeRewards = (currentStake - lifetimeStaked) + lifetimeUnbonded;
+
+      return {
+        success: true,
+        data: {
+          delegator: delegatorAddress,
+          currentStake: pendingStakeFormatted,
+          lifetimeStaked: lifetimeStaked.toString(),
+          lifetimeUnbonded: lifetimeUnbonded.toString(),
+          lifetimeRewards: lifetimeRewards.toString()
+        }
+      };
+    } catch (error) {
+      console.error("Error fetching stake profile:", error);
+      return { success: false, error: "Failed to fetch stake profile" };
     }
   }
 }

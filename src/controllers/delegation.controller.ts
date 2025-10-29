@@ -84,11 +84,11 @@ class DelegationController {
     }
   }
 
-  async getPendingRewards(req: Request, res: Response): Promise<Response> {
+  async getPendingFees(req: Request, res: Response): Promise<Response> {
     const { delegator, transcoder } = req.params;
 
     try {
-      const result = await delegationService.getPendingRewards(delegator, transcoder);
+      const result = await delegationService.getPendingFees(delegator, transcoder);
 
       if (result.success) {
         return res.status(200).json({ success: true, rewards: result.rewards });
@@ -96,7 +96,7 @@ class DelegationController {
         return res.status(404).json({ success: false, error: result.error });
       }
     } catch (error) {
-      console.error('Error in getPendingRewards:', error);
+      console.error('Error in getPendingFees:', error);
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
@@ -280,6 +280,35 @@ class DelegationController {
       }
     } catch (error) {
       console.error('Error in getDelegatorRewards:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Get stake profile for a delegator
+   */
+  async getStakeProfile(req: Request, res: Response): Promise<Response> {
+    const { delegator } = req.params;
+
+    try {
+      const result = await delegationService.getStakeProfile(delegator);
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in getStakeProfile:', error);
       return res.status(500).json({
         success: false,
         error: 'Internal server error'
