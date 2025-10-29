@@ -389,3 +389,117 @@ export const GET_EVENTS = `
     }
   }
 `;
+
+// Earner leaderboard queries
+export const GET_EARNER_LEADERBOARD_QUERY = `
+  query GetEarnerLeaderboard($first: Int!, $skip: Int!, $orderBy: String!, $orderDirection: String!) {
+    delegators(
+      first: $first
+      skip: $skip
+      orderBy: $orderBy
+      orderDirection: $orderDirection
+      where: { bondedAmount_gt: "0" }
+    ) {
+      id
+      bondedAmount
+      fees
+      delegatedAmount
+      lastClaimRound {
+        id
+      }
+      delegate {
+        id
+        feeShare
+        rewardCut
+      }
+    }
+  }
+`;
+
+export const GET_TOP_EARNERS_BY_REWARDS_QUERY = `
+  query GetTopEarnersByRewards($first: Int!) {
+    rewardEvents(
+      first: $first
+      orderBy: rewardTokens
+      orderDirection: desc
+      where: { rewardTokens_gt: "0" }
+    ) {
+      delegator {
+        id
+        bondedAmount
+        fees
+        delegatedAmount
+      }
+      rewardTokens
+      round {
+        id
+      }
+      delegate {
+        id
+      }
+    }
+  }
+`;
+
+// New query for time-filtered earnings
+export const GET_EARNINGS_BY_TIME_PERIOD_QUERY = `
+  query GetEarningsByTimePeriod($startTimestamp: Int!, $endTimestamp: Int!, $first: Int!, $skip: Int!) {
+    rewardEvents(
+      where: { 
+        timestamp_gte: $startTimestamp,
+        timestamp_lte: $endTimestamp,
+        rewardTokens_gt: "0"
+      }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      id
+      delegator {
+        id
+        bondedAmount
+        delegatedAmount
+      }
+      delegate {
+        id
+        feeShare
+        rewardCut
+      }
+      rewardTokens
+      timestamp
+      round {
+        id
+      }
+    }
+  }
+`;
+
+// Query for bond events within time period
+export const GET_BOND_EVENTS_BY_TIME_PERIOD_QUERY = `
+  query GetBondEventsByTimePeriod($startTimestamp: Int!, $endTimestamp: Int!, $first: Int!) {
+    bondEvents(
+      where: { 
+        timestamp_gte: $startTimestamp,
+        timestamp_lte: $endTimestamp
+      }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+    ) {
+      id
+      delegator {
+        id
+      }
+      bondedAmount
+      additionalAmount
+      newDelegate {
+        id
+      }
+      timestamp
+      round {
+        id
+      }
+    }
+  }
+`;

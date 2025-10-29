@@ -179,6 +179,34 @@ export class UserService {
   }
 
   /**
+   * Get all users with wallet addresses from Supabase
+   */
+  async getAllUsersWithWallets(): Promise<Array<{ user_id: string; wallet_address: string; email: string; full_name?: string }>> {
+    try {
+      // Ensure Supabase client is initialized
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized. Please check your configuration.');
+      }
+
+      // Fetch all users with wallet addresses
+      const { data, error } = await supabase
+        .from('users')
+        .select('user_id, wallet_address, email, full_name')
+        .not('wallet_address', 'is', null)
+        .not('wallet_address', 'eq', '');
+
+      if (error) {
+        throw new Error(`Failed to fetch users: ${error.message}`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching all users with wallets:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update user profile in Supabase
    */
   async updateUserProfile(userId: string, updates: Partial<{
