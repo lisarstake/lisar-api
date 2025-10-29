@@ -145,7 +145,6 @@ export class DelegationService {
       }
 
       const currentRoundId = protocolStatus.currentRound.toString();
-      const roundLength = protocolStatus.roundLength || 20; // Default round length in hours (Livepeer rounds are ~20 hours)
 
       const response = await this.client.request<{ delegator: any }>(query, {
         id: delegatorAddress.toLowerCase(),
@@ -167,29 +166,24 @@ export class DelegationService {
         .map((item: any) => {
           const withdrawRound = parseInt(item.withdrawRound, 10);
           const currentRound = parseInt(currentRoundId, 10);
-          const roundsRemaining = withdrawRound - currentRound;
-          const hoursRemaining = roundsRemaining * roundLength;
-          const daysRemaining = Math.floor(hoursRemaining / 24);
-          const remainingHours = hoursRemaining % 24;
+          const daysRemaining = withdrawRound - currentRound;
 
           // Create human-readable format
           let timeRemainingFormatted = "";
-          if (daysRemaining > 0) {
-            timeRemainingFormatted = daysRemaining === 1 ? "1 day remaining" : `${daysRemaining} days remaining`;
-          } else if (hoursRemaining > 0) {
-            timeRemainingFormatted = hoursRemaining === 1 ? "1 hour remaining" : `${hoursRemaining} hours remaining`;
+          if (daysRemaining > 1) {
+            timeRemainingFormatted = `${daysRemaining} days remaining`;
+          } else if (daysRemaining === 1) {
+            timeRemainingFormatted = "1 day remaining";
           } else {
-            timeRemainingFormatted = "Less than 1 hour remaining";
+            timeRemainingFormatted = "Less than 1 day remaining";
           }
 
           return {
             ...item,
-            roundsRemaining,
-            hoursRemaining,
-            daysRemaining,
-            remainingHours,
+            roundsRemaining: daysRemaining,
+            daysRemaining: daysRemaining,
             timeRemainingFormatted,
-            estimatedAvailableDate: new Date(Date.now() + (hoursRemaining * 60 * 60 * 1000)).toISOString()
+            estimatedAvailableDate: new Date(Date.now() + (daysRemaining * 24 * 60 * 60 * 1000)).toISOString()
           };
         });
 
@@ -202,9 +196,7 @@ export class DelegationService {
         .map((item: any) => ({
           ...item,
           roundsRemaining: 0,
-          hoursRemaining: 0,
           daysRemaining: 0,
-          remainingHours: 0,
           timeRemainingFormatted: "Available now",
           estimatedAvailableDate: "Available now"
         }));

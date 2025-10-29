@@ -121,20 +121,12 @@ router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(d
  *                             example: "2900"
  *                           roundsRemaining:
  *                             type: number
- *                             description: Number of rounds remaining until withdrawal is available
- *                             example: 10
- *                           hoursRemaining:
- *                             type: number
- *                             description: Total hours remaining until withdrawal is available
- *                             example: 200
+ *                             description: Number of rounds remaining until withdrawal is available (same as days)
+ *                             example: 3
  *                           daysRemaining:
  *                             type: number
- *                             description: Number of full days remaining
- *                             example: 8
- *                           remainingHours:
- *                             type: number
- *                             description: Remaining hours after full days
- *                             example: 8
+ *                             description: Number of days remaining (1 round = ~1 day)
+ *                             example: 3
  *                           timeRemainingFormatted:
  *                             type: string
  *                             description: Human-readable time remaining format
@@ -142,7 +134,7 @@ router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(d
  *                           estimatedAvailableDate:
  *                             type: string
  *                             description: ISO timestamp when withdrawal will be available
- *                             example: "2025-11-06T12:00:00.000Z"
+ *                             example: "2025-11-01T12:00:00.000Z"
  *                     completedStakeTransactions:
  *                       type: array
  *                       description: Unbonding locks ready for withdrawal
@@ -165,7 +157,7 @@ router.get('/:delegator', verifyAuth, delegationController.getDelegations.bind(d
  *                             type: number
  *                             description: Always 0 for completed transactions
  *                             example: 0
- *                           hoursRemaining:
+ *                           daysRemaining:
  *                             type: number
  *                             description: Always 0 for completed transactions
  *                             example: 0
