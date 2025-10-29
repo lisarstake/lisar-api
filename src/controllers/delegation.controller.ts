@@ -315,6 +315,100 @@ class DelegationController {
       });
     }
   }
+
+  /**
+   * Calculate yield/rewards for LPT delegation
+   */
+  async calculateYield(req: Request, res: Response): Promise<Response> {
+    try {
+      const {
+        amount,
+        apy,
+        period,
+        includeCurrencyConversion,
+        currency
+      } = req.body;
+
+      // Validate required parameters
+      if (!amount || !apy) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required parameters: amount and apy are required'
+        });
+      }
+
+      // Validate amount and apy are positive numbers
+      const numericAmount = parseFloat(amount);
+      
+      // Handle APY as percentage string (e.g., "62%") or number (e.g., 62)
+      let numericApy: number;
+      if (typeof apy === 'string' && apy.endsWith('%')) {
+        numericApy = parseFloat(apy.replace('%', ''));
+      } else {
+        numericApy = parseFloat(apy);
+      }
+
+      if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Amount must be a positive number'
+        });
+      }
+
+      if (isNaN(numericApy) || numericApy <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'APY must be a positive number (can be provided as "62%" or 62)'
+        });
+      }
+
+      // Validate period if provided
+      if (period) {
+        const validPeriods = ['1 day', '1 week', '1 month', '6 months', '1 year'];
+        if (!validPeriods.includes(period)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid period. Must be one of: ${validPeriods.join(', ')}`
+          });
+        }
+      }
+
+      // Validate currency if provided
+      if (currency && !['USD', 'EUR', 'GBP'].includes(currency)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid currency. Must be one of: USD, EUR, GBP'
+        });
+      }
+
+      const result = await delegationService.calculateYield({
+        amount: numericAmount,
+        apy: numericApy,
+        period: period as '1 day' | '1 week' | '1 month' | '6 months' | '1 year' | undefined,
+        includeCurrencyConversion: includeCurrencyConversion === true,
+        currency: currency as 'USD' | 'EUR' | 'GBP' || 'USD'
+      });
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in calculateYield:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
 }
 
 export const delegationController = new DelegationController();

@@ -1,5 +1,5 @@
 import { GraphQLClient } from 'graphql-request';
-import { GET_EARNER_LEADERBOARD_QUERY, GET_TOP_EARNERS_BY_REWARDS_QUERY, GET_DELEGATOR_BY_ADDRESS_QUERY, GET_EARNINGS_BY_TIME_PERIOD_QUERY, GET_BOND_EVENTS_BY_TIME_PERIOD_QUERY } from '../queries/subgraph.queries';
+import { GET_EARNER_LEADERBOARD_QUERY, GET_TOP_EARNERS_BY_REWARDS_QUERY, GET_DELEGATOR_BY_ADDRESS_QUERY, GET_EARNINGS_BY_TIME_PERIOD_QUERY, GET_BOND_EVENTS_BY_TIME_PERIOD_QUERY, GET_DELEGATOR_EVENTS_BY_TIME_PERIOD_QUERY } from '../queries/subgraph.queries';
 import { userService } from './user.service';
 import { delegationService } from './delegation.service';
 
@@ -253,26 +253,34 @@ export class EarnerService {
 
     const walletAddresses = users.map(user => user.wallet_address.toLowerCase());
 
-    // Get reward events for the time period
-    const rewardResponse = await this.client.request<{ rewardEvents: any[] }>(
+    // Get basic delegator data first
+    const delegatorResponse = await this.client.request<{ delegators: any[] }>(
       GET_EARNINGS_BY_TIME_PERIOD_QUERY,
       {
-        startTimestamp,
-        endTimestamp,
-        first: 1000,
-        skip: 0
+        delegators: walletAddresses
       }
     );
 
-    // Get bond events for the time period
-    const bondResponse = await this.client.request<{ bondEvents: any[] }>(
-      GET_BOND_EVENTS_BY_TIME_PERIOD_QUERY,
-      {
-        startTimestamp,
-        endTimestamp,
-        first: 1000
+    // Get detailed events for each delegator within the time period
+    const delegatorEventPromises = walletAddresses.map(async (address) => {
+      try {
+        const eventsResponse = await this.client.request<{ transactions: any[] }>(
+          GET_DELEGATOR_EVENTS_BY_TIME_PERIOD_QUERY,
+          {
+            delegator: address,
+            startTimestamp,
+            endTimestamp
+          }
+        );
+        return { address, events: eventsResponse.transactions || [] };
+      } catch (error) {
+        console.warn(`Failed to get events for delegator ${address}:`, error);
+        return { address, events: [] };
       }
-    );
+    });
+
+    const delegatorEventsResults = await Promise.all(delegatorEventPromises);
+    const delegatorEventsMap = new Map(delegatorEventsResults.map(r => [r.address, r.events]));
 
     // Get basic delegator data for lifetime stats
     const delegatorPromises = walletAddresses.map(async (address) => {
@@ -306,53 +314,39 @@ export class EarnerService {
       delegates: Map<string, number>;
     }>();
 
-    // Process reward events
-    rewardResponse.rewardEvents?.forEach(event => {
-      const delegatorId = event.delegator?.id?.toLowerCase();
-      if (delegatorId && walletAddresses.includes(delegatorId)) {
-        if (!delegatorActivity.has(delegatorId)) {
-          delegatorActivity.set(delegatorId, {
-            address: delegatorId,
-            periodRewards: 0,
-            periodBondingActivity: 0,
-            rewardEvents: 0,
-            bondEvents: 0,
-            delegates: new Map()
-          });
-        }
-        
-        const activity = delegatorActivity.get(delegatorId)!;
-        activity.periodRewards += parseFloat(event.rewardTokens || '0');
-        activity.rewardEvents += 1;
-        
-        // Track delegate activity
-        const delegateId = event.delegate?.id;
-        if (delegateId) {
-          const currentDelegateRewards = activity.delegates.get(delegateId) || 0;
-          activity.delegates.set(delegateId, currentDelegateRewards + parseFloat(event.rewardTokens || '0'));
-        }
+    // Process delegator events to aggregate activity
+    delegatorEventsMap.forEach((transactions, delegatorAddress) => {
+      if (!delegatorActivity.has(delegatorAddress)) {
+        delegatorActivity.set(delegatorAddress, {
+          address: delegatorAddress,
+          periodRewards: 0,
+          periodBondingActivity: 0,
+          rewardEvents: 0,
+          bondEvents: 0,
+          delegates: new Map()
+        });
       }
-    });
 
-    // Process bond events
-    bondResponse.bondEvents?.forEach(event => {
-      const delegatorId = event.delegator?.id?.toLowerCase();
-      if (delegatorId && walletAddresses.includes(delegatorId)) {
-        if (!delegatorActivity.has(delegatorId)) {
-          delegatorActivity.set(delegatorId, {
-            address: delegatorId,
-            periodRewards: 0,
-            periodBondingActivity: 0,
-            rewardEvents: 0,
-            bondEvents: 0,
-            delegates: new Map()
-          });
-        }
-        
-        const activity = delegatorActivity.get(delegatorId)!;
-        activity.periodBondingActivity += parseFloat(event.additionalAmount || '0');
-        activity.bondEvents += 1;
-      }
+      const activity = delegatorActivity.get(delegatorAddress)!;
+
+      transactions.forEach((transaction: any) => {
+        transaction.events?.forEach((event: any) => {
+          if (event.__typename === 'RewardEvent') {
+            activity.periodRewards += parseFloat(event.rewardTokens || '0');
+            activity.rewardEvents += 1;
+            
+            // Track delegate activity
+            const delegateId = event.delegate?.id;
+            if (delegateId) {
+              const currentDelegateRewards = activity.delegates.get(delegateId) || 0;
+              activity.delegates.set(delegateId, currentDelegateRewards + parseFloat(event.rewardTokens || '0'));
+            }
+          } else if (event.__typename === 'BondEvent') {
+            activity.periodBondingActivity += parseFloat(event.additionalAmount || '0');
+            activity.bondEvents += 1;
+          }
+        });
+      });
     });
 
     // Convert to array and enhance with user data and lifetime stats

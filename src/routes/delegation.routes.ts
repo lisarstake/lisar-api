@@ -1033,5 +1033,171 @@ router.post('/withdraw-fees',verifyAuth, (req, res) => delegationController.with
  */
 router.get('/:delegator/transactions',verifyAuth, (req, res) => delegationController.getDelegatorTransactions(req, res));
 
+/**
+ * @swagger
+ * /delegation/calculate-yield:
+ *   post:
+ *     summary: Calculate yield/rewards for LPT delegation
+ *     description: Calculate projected rewards based on amount and APY. If no period is specified, returns calculations for all time periods (daily, weekly, monthly, 6 months, yearly)
+ *     tags: [Delegation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - apy
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Initial LPT amount to delegate
+ *                 example: 1000
+ *                 minimum: 0.01
+ *               apy:
+ *                 oneOf:
+ *                   - type: string
+ *                     description: Annual Percentage Yield as percentage string
+ *                     example: "5.2%"
+ *                   - type: number
+ *                     description: Annual Percentage Yield as number
+ *                     example: 5.2
+ *                 description: Annual Percentage Yield (can be "62%" or 62)
+ *                 minimum: 0.01
+ *               period:
+ *                 type: string
+ *                 enum: ['1 day', '1 week', '1 month', '6 months', '1 year']
+ *                 description: Time period for calculation (optional - if not provided, returns calculations for all periods)
+ *                 example: '1 year'
+ *               includeCurrencyConversion:
+ *                 type: boolean
+ *                 description: Whether to include current market value conversion
+ *                 example: true
+ *                 default: false
+ *               currency:
+ *                 type: string
+ *                 enum: ['USD', 'EUR', 'GBP']
+ *                 description: Currency for market value conversion (if includeCurrencyConversion is true)
+ *                 example: 'USD'
+ *                 default: 'USD'
+ *     responses:
+ *       200:
+ *         description: Yield calculation completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     initialAmount:
+ *                       type: number
+ *                       description: Initial LPT amount
+ *                       example: 1000
+ *                     apy:
+ *                       type: number
+ *                       description: APY used in calculation
+ *                       example: 5.2
+ *                     periods:
+ *                       type: array
+ *                       description: Array of calculations for different time periods
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           period:
+ *                             type: string
+ *                             description: Time period
+ *                             example: '1 year'
+ *                           finalAmount:
+ *                             type: number
+ *                             description: Final LPT amount after compounding
+ *                             example: 1053.4
+ *                           rewardAmount:
+ *                             type: number
+ *                             description: Total rewards earned
+ *                             example: 53.4
+ *                           compoundingPeriods:
+ *                             type: number
+ *                             description: Number of compounding periods (based on Livepeer rounds)
+ *                             example: 403.7
+ *                           periodicRate:
+ *                             type: number
+ *                             description: Rate per compounding period
+ *                             example: 0.000131
+ *                           marketValue:
+ *                             type: object
+ *                             description: Market value for this period (only if includeCurrencyConversion is true)
+ *                             properties:
+ *                               finalMarketValue:
+ *                                 type: number
+ *                                 description: Final amount in target currency
+ *                                 example: 13167.5
+ *                               rewardMarketValue:
+ *                                 type: number
+ *                                 description: Rewards in target currency
+ *                                 example: 667.5
+ *                     marketValue:
+ *                       type: object
+ *                       description: Market value conversion (only if includeCurrencyConversion is true)
+ *                       properties:
+ *                         currency:
+ *                           type: string
+ *                           example: 'USD'
+ *                         lptPrice:
+ *                           type: number
+ *                           description: Current LPT price in USD
+ *                           example: 12.50
+ *                         exchangeRate:
+ *                           type: number
+ *                           description: USD to target currency rate (omitted for USD)
+ *                           example: 0.85
+ *                         initialMarketValue:
+ *                           type: number
+ *                           description: Initial amount in target currency
+ *                           example: 12500
+ *                         finalMarketValue:
+ *                           type: number
+ *                           description: Final amount in target currency
+ *                           example: 13167.5
+ *                         rewardMarketValue:
+ *                           type: number
+ *                           description: Rewards in target currency
+ *                           example: 667.5
+ *       400:
+ *         description: Bad request - invalid parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: Amount must be a positive number
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: Internal server error
+ */
+router.post('/calculate-yield', verifyAuth, (req, res) => delegationController.calculateYield(req, res));
+
 export default router;
 
