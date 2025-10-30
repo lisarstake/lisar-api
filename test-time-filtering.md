@@ -2,6 +2,8 @@
 
 The earner leaderboard endpoint now supports optional time filtering to analyze performance over specific periods.
 
+**Note**: This leaderboard shows actual performance data from real delegations and orchestrator relationships. For yield projections that consider specific orchestrator parameters (reward cuts, fee shares), see the [LPT Yield Calculator API](./orchestrator-yield-calculator.md).
+
 ## Endpoint
 
 `GET /earners/leaderboard`

@@ -441,35 +441,63 @@ export const GET_TOP_EARNERS_BY_REWARDS_QUERY = `
   }
 `;
 
-// New query for time-filtered earnings
-export const GET_EARNINGS_BY_TIME_PERIOD_QUERY = `
-  query GetEarningsByTimePeriod($startTimestamp: Int!, $endTimestamp: Int!, $first: Int!, $skip: Int!) {
-    rewardEvents(
+// Query for time-filtered delegator events
+export const GET_DELEGATOR_EVENTS_BY_TIME_PERIOD_QUERY = `
+  query GetDelegatorEventsByTimePeriod($delegator: String!, $startTimestamp: Int!, $endTimestamp: Int!) {
+    transactions(
       where: { 
+        from_contains: $delegator,
         timestamp_gte: $startTimestamp,
-        timestamp_lte: $endTimestamp,
-        rewardTokens_gt: "0"
+        timestamp_lte: $endTimestamp
       }
       orderBy: timestamp
       orderDirection: desc
-      first: $first
-      skip: $skip
+      first: 1000
     ) {
-      id
-      delegator {
-        id
-        bondedAmount
-        delegatedAmount
+      events(orderBy: timestamp, orderDirection: desc) {
+        __typename
+        round {
+          id
+        }
+        transaction {
+          id
+          timestamp
+          from
+        }
+        ... on RewardEvent {
+          delegate {
+            id
+          }
+          rewardTokens
+        }
+        ... on BondEvent {
+          delegator {
+            id
+          }
+          newDelegate {
+            id
+          }
+          oldDelegate {
+            id
+          }
+          additionalAmount
+        }
       }
+    }
+  }
+`;
+
+// Simple query to get basic delegator info (for fallback)
+export const GET_EARNINGS_BY_TIME_PERIOD_QUERY = `
+  query GetEarningsByTimePeriod($delegators: [String!]!) {
+    delegators(where: { id_in: $delegators }) {
+      id
+      bondedAmount
+      delegatedAmount
       delegate {
         id
         feeShare
         rewardCut
-      }
-      rewardTokens
-      timestamp
-      round {
-        id
       }
     }
   }
