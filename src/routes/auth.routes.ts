@@ -187,9 +187,26 @@ router.get('/google', authController.googleAuth.bind(authController));
 /**
  * @swagger
  * /auth/google/callback:
- *   get:
- *     summary: Handle Google OAuth callback
+ *   post:
+ *     summary: Handle Google OAuth callback with access token
  *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - access_token
+ *             properties:
+ *               access_token:
+ *                 type: string
+ *                 description: The access token from Google OAuth response
+ *                 example: eyJhbGciOiJFUzI1NiIsImtpZCI6...
+ *               refresh_token:
+ *                 type: string
+ *                 description: The refresh token from Google OAuth response (optional)
+ *                 example: af46cpyhpdei
  *     responses:
  *       200:
  *         description: Google OAuth successful
