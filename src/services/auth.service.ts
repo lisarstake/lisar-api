@@ -163,8 +163,10 @@ export class AuthService {
           redirectTo: process.env.GOOGLE_REDIRECT_URI
         }
       });
-        console.log('Google OAuth URL data:', data);
-        console.log('Google OAuth URL error:', error);
+      
+      console.log('Google OAuth URL data:', data);
+      console.log('Google OAuth URL error:', error);
+      
       return {
         url: data.url || null,
         error: error as AuthError | null
@@ -178,9 +180,9 @@ export class AuthService {
   }
 
   /**
-   * Handle Google OAuth callback
+   * Handle Google OAuth callback with access token
    */
-  async handleGoogleCallback(code: string): Promise<AuthResponse> {
+  async handleGoogleCallback(accessToken: string, refreshToken?: string): Promise<AuthResponse> {
     if (!supabase) {
       return {
         user: null,
@@ -189,15 +191,27 @@ export class AuthService {
       };
     }
 
+    console.log('Handling Google OAuth callback with access_token:', accessToken?.substring(0, 20) + '...');
+    
     try {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-      console.log('Google OAuth callback data:', error);
+      // Since we have the access_token directly from the OAuth flow,
+      // we need to set the session using the tokens
+      const { data, error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || ''
+      });
+      console.log(data,"data")
+      console.log('Google OAuth setSession result:', { 
+        hasUser: !!data.user, 
+        hasSession: !!data.session, 
+        error: error?.message 
+      });
       
       if (error || !data.user || !data.session) {
         return {
           user: data.user,
           session: data.session,
-          error: error as AuthError | null
+          error: error as AuthError || new AuthError('Failed to set session') as AuthError
         };
       }
 
@@ -206,58 +220,64 @@ export class AuthService {
         .from('users')
         .select('user_id, privy_user_id, wallet_id')
         .eq('user_id', data.user.id)
-        .maybeSingle();
+        .single();
 
       // If user doesn't exist in our database, create Privy wallet
       if (!existingUser) {
-        try {
-          console.log('New Google OAuth user detected, creating Privy wallet...');
-          
-          // Create user and wallet in Privy
-          const { user: privyUser, wallet } = await privyService.createUserWithWallet(data.user.id);
-          
-          // Insert user data into our database
-          const { error: dbError } = await supabase.from('users').insert({
-            user_id: data.user.id,
-            email: data.user.email,
-            privy_user_id: privyUser.id,
-            wallet_id: wallet?.id,
-            wallet_address: wallet?.address,
-            chain_type: wallet?.chain_type,
-            full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name,
-            img: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
-            DOB: null,
-            country: null,
-            state: null,
-            fiat_type: null,
-            fiat_balance: 0,
-            lpt_balance: 0,
-            created_date: new Date().toISOString()
-          });
-
-          if (dbError) {
-            console.error('Failed to insert user into database:', dbError);
-            // Don't fail the auth process, but log the error
-          } else {
-            console.log('Successfully created Privy wallet for Google OAuth user');
-          }
-        } catch (privyError) {
-          console.error('Failed to create Privy wallet for Google OAuth user:', privyError);
-          // Don't fail the auth process, but log the error
-        }
+        await this.handleNewGoogleUser(data.user);
       }
 
       return {
         user: data.user,
         session: data.session,
-        error: error as AuthError | null
+        error: null
       };
     } catch (err) {
+      console.error('Exception in handleGoogleCallback:', err);
       return {
         user: null,
         session: null,
         error: new AuthError(err instanceof Error ? err.message : 'Unknown error') as AuthError
       };
+    }
+  }
+
+  /**
+   * Handle new Google OAuth user creation
+   */
+  private async handleNewGoogleUser(user: User): Promise<void> {
+    try {
+      console.log('New Google OAuth user detected, creating Privy wallet...');
+      
+      // Create user and wallet in Privy
+      const { user: privyUser, wallet } = await privyService.createUserWithWallet(user.id);
+      
+      // Insert user data into our database
+      const { error: dbError } = await supabase!.from('users').insert({
+        user_id: user.id,
+        email: user.email,
+        privy_user_id: privyUser.id,
+        wallet_id: wallet?.id,
+        wallet_address: wallet?.address,
+        chain_type: wallet?.chain_type,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name,
+        img: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+        DOB: null,
+        country: null,
+        state: null,
+        fiat_type: null,
+        fiat_balance: 0,
+        lpt_balance: 0,
+        created_date: new Date().toISOString()
+      });
+
+      if (dbError) {
+        console.error('Failed to insert user into database:', dbError);
+      } else {
+        console.log('Successfully created Privy wallet for Google OAuth user');
+      }
+    } catch (privyError) {
+      console.error('Failed to create Privy wallet for Google OAuth user:', privyError);
     }
   }
 

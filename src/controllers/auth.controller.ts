@@ -262,8 +262,8 @@ export class AuthController {
    */
   async googleAuthCallback(req: Request, res: Response): Promise<void> {
     try {
-      const { code } = req.query;
-       console.log('Received Google OAuth callback with code:', code);
+      const { code, refresh_token } = req.query;
+
       if (!code) {
         res.status(400).json({
           success: false,
@@ -272,7 +272,7 @@ export class AuthController {
         return;
       }
 
-      const { user, session, error } = await authService.handleGoogleCallback(code as string);
+      const { user, session, error } = await authService.handleGoogleCallback(code as string, refresh_token as string | undefined);
 
       if (error) {
         res.status(400).json({
