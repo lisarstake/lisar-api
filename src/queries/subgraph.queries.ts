@@ -1,7 +1,7 @@
-// Query to fetch all transcoders
+// Query to fetch all active transcoders
 export const GET_ALL_TRANSCODERS_QUERY = `
   query GetTranscoders {
-    transcoders(first: 1000) {
+    transcoders(first: 1000, where: { active: true }) {
       id
       rewardCut
       feeShare
