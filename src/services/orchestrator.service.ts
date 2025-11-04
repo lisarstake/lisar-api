@@ -50,6 +50,28 @@ export class OrchestratorService {
     });
   }
 
+  // Simple in-memory TTL cache (safe default for single-instance deployments)
+  private cache = new Map<string, { value: any; expiresAt: number }>();
+
+  private getFromCache<T = any>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.value as T;
+  }
+
+  private setCache(key: string, value: any, ttlMs: number) {
+    this.cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  private hashQueryAndParams(query: string, params?: QueryParams) {
+    const crypto = require('crypto');
+    return crypto.createHash('md5').update(query + JSON.stringify(params || {})).digest('hex');
+  }
+
   private calculatePerformance(transcoder: Transcoder): string {
     const stake = parseFloat(transcoder.totalStake);
     const volume = parseFloat(transcoder.totalVolumeETH);
@@ -154,6 +176,10 @@ export class OrchestratorService {
 
   async fetchENS(address: string): Promise<string | null> {
     try {
+      const cacheKey = `ens:${address.toLowerCase()}`;
+      const cached = this.getFromCache<string>(cacheKey);
+      if (cached) return cached;
+
       const query = `
         query getENS($address: String!) {
           domains(where: { resolvedAddress: $address }, orderBy: createdAt, orderDirection: desc) {
@@ -162,7 +188,12 @@ export class OrchestratorService {
         }
       `;
       const response = await this.ensClient.request<{ domains: { name: string }[] }>(query, { address });
-      return response.domains?.[0]?.name || null;
+      const name = response.domains?.[0]?.name || null;
+
+      // Cache ENS lookups for a longer period (configurable, default 6 hours)
+      const ensTtl = parseInt(process.env.ENS_CACHE_TTL_MS || `${6 * 60 * 60 * 1000}`, 10);
+      if (name) this.setCache(cacheKey, name, ensTtl);
+      return name;
     } catch (error) {
       console.error('Error fetching ENS domain:', error);
       return null;
@@ -171,6 +202,12 @@ export class OrchestratorService {
 
   async fetchFromSubgraph(query: string, params?: QueryParams): Promise<any> {
     try {
+      // Short-lived cache for list queries (default 30s)
+      const listTtl = parseInt(process.env.SUBGRAPH_LIST_TTL_MS || `${30 * 1000}`, 10);
+      const cacheKey = `subgraph:list:${this.hashQueryAndParams(query, params)}`;
+      const cached = this.getFromCache<any>(cacheKey);
+      if (cached) return cached;
+
       const response = await this.client.request<{ transcoders: Transcoder[] }>(query);
       let transcoders = response.transcoders || [];
 
@@ -191,12 +228,8 @@ export class OrchestratorService {
       // Transform and enhance data
       let enhancedTranscoders = transcoders.map((transcoder) => {
         const ensName = storedENSNames[transcoder.id];
-        
-        // Get yield from static data or fallback to calculated APY
         const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
-        console.log(`[DEBUG] Transcoder ${transcoder.id} (${ensName}): yieldFromData = ${yieldFromData}`);
         const apy = yieldFromData !== null ? yieldFromData : this.calculateAPY(transcoder.rewardCut);
-        
         return {
           address: transcoder.id,
           ensName,
@@ -275,12 +308,15 @@ export class OrchestratorService {
       const end = start + limit;
       const paginatedTranscoders = enhancedTranscoders.slice(start, end);
 
-      return {
+      const result = {
         data: paginatedTranscoders,
         total,
         page,
         totalPages: Math.ceil(total / limit)
       };
+
+      this.setCache(cacheKey, result, listTtl);
+      return result;
     } catch (error) {
       console.error('Error fetching from subgraph:', error);
       throw error;
@@ -292,6 +328,11 @@ export class OrchestratorService {
    * Returns APY from static yield data or falls back to calculated value.
    */
   async calculateApyFor(id: string, options?: { principle?: number; timeHorizon?: string; inflationChange?: string; factors?: string }) {
+    const cacheKey = `apy:${id.toLowerCase()}:${JSON.stringify(options || {})}`;
+    const ttlMs = parseInt(process.env.APY_TTL_MS || `${60 * 1000}`, 10); // default 60s
+    const cached = this.getFromCache<any>(cacheKey);
+    if (cached) return cached;
+
     try {
       const query = `
         query getTranscoder($id: ID!) {
@@ -341,21 +382,14 @@ export class OrchestratorService {
       // Fallback to simple calculated APY if no static data found
       const calculatedApy = this.calculateAPY(t.rewardCut);
       
-      return {
-        apyPercent: calculatedApy,
-        roi: {
-          delegatorPercent: {
-            rewards: calculatedApy / 100,
-            fees: 0
-          }
-        },
-        inputsUsed: { 
-          source: 'calculated_fallback',
-          ensName: ensName || 'none',
-          address: t.id,
-          rewardCut: t.rewardCut
-        }
+      const result = {
+        apyPercent: yieldFromData !== null ? yieldFromData : calculatedApy,
+        roi: yieldFromData !== null ? { delegatorPercent: { rewards: yieldFromData / 100, fees: 0 } } : { delegatorPercent: { rewards: calculatedApy / 100, fees: 0 } },
+        inputsUsed: yieldFromData !== null ? { source: 'static_yield_data', ensName: ensName || 'none', address: t.id, yieldValue: yieldFromData } : { source: 'calculated_fallback', ensName: ensName || 'none', address: t.id, rewardCut: t.rewardCut }
       };
+
+      this.setCache(cacheKey, result, ttlMs);
+      return result;
     } catch (err) {
       console.error('calculateApyFor error:', err);
       throw err;
