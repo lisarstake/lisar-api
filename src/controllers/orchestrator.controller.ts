@@ -8,7 +8,7 @@ export class OrchestratorController {
       const {
         page = '1',
         limit = '10',
-        sortBy = 'totalStake',
+        sortBy = 'apy',
         sortOrder = 'desc',
         minApy,
         maxApy,
