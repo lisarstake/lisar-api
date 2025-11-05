@@ -244,5 +244,34 @@ router.get('/profile/:userId',verifyAuth, userController.getUserProfile.bind(use
  *               $ref: '#/components/schemas/Error'
  */
 router.patch('/profile/:userId', verifyAuth, userController.updateUserProfile.bind(userController));
+/**
+ * @swagger
+ * /users/profile/{userId}/onboard:
+ *   patch:
+ *     summary: Update user's onboarding status
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               is_onboarded:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Onboard status updated
+ *       400:
+ *         description: Bad request
+ */
+router.patch('/profile/:userId/onboard', verifyAuth, userController.updateUserOnboardStatus.bind(userController));
 
 export default router;
