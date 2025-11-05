@@ -43,7 +43,7 @@ const router = Router();
  *                     lastUpdated:
  *                       type: string
  */
-router.get('/summary', adminAuth, adminDashboardController.summary);
+router.get('/summary', adminDashboardController.summary);
 
 /**
  * @swagger
@@ -75,7 +75,7 @@ router.get('/summary', adminAuth, adminDashboardController.summary);
  *                   items:
  *                     type: object
  */
-router.get('/transactions', adminAuth, adminDashboardController.recentTransactions);
+router.get('/transactions', adminDashboardController.recentTransactions);
 
 /**
  * @swagger

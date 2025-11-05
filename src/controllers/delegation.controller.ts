@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { delegationService } from '../services/delegation.service';
 import { livepeerService } from '../protocols/services/livepeer.service';
+import { transactionService } from '../services/transaction.service';
+import { supabase } from '../config/supabase';
 
 class DelegationController {
   async getDelegations(req: Request, res: Response): Promise<void> {
@@ -40,6 +42,49 @@ class DelegationController {
       );
 
       if (result.success) {
+        // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) {
+                console.error('Error fetching user for transaction creation:', userError);
+              }
+
+              if (user && (user as any).user_id) {
+                userId = (user as any).user_id;
+              }
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'delegation',
+              transaction_timestamp: new Date().toISOString(),
+              amount: amount.toString(),
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'pending',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) {
+              console.error('Failed to create delegation transaction record:', txCreateResult.error);
+            }
+          } catch (err) {
+            console.error('Error creating delegation transaction record:', err);
+          }
+        })();
+
         return res.status(200).json({ success: true, txHash: result.txHash });
       } else {
         return res.status(500).json({ success: false, error: result.error });
@@ -125,6 +170,42 @@ class DelegationController {
       );
 
       if (result.success) {
+        // Best-effort create undelegation transaction record
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'undelegation',
+              created_at: new Date().toISOString(),
+              amount: amount.toString(),
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'pending',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create undelegation transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating undelegation transaction record:', err);
+          }
+        })();
+
         return res.status(200).json({ success:true ,txHash: result.txHash });
       } else {
         return res.status(500).json({ success: false,error: result.error });
@@ -165,6 +246,42 @@ class DelegationController {
       );
 
       if (result.success) {
+        // Best-effort create withdrawal transaction record (amount unknown from request)
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'withdrawal',
+              created_at: new Date().toISOString(),
+              amount: '0',
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'pending',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create withdrawStake transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating withdrawStake transaction record:', err);
+          }
+        })();
+
         return res.status(200).json({
           success: true,
           message: 'Successfully withdrew unbonded stake from Livepeer',
@@ -212,16 +329,49 @@ class DelegationController {
       );
 
       if (result.success) {
+        // Best-effort create withdrawal (fees) transaction record
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'withdrawal',
+               created_at: new Date().toISOString(),
+              amount: amount.toString(),
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'pending',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create withdrawFees transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating withdrawFees transaction record:', err);
+          }
+        })();
+
         return res.status(200).json({
           success: true,
           message: 'Successfully withdrew fees from Livepeer',
           txHash: result.txHash
         });
       } else {
-        return res.status(500).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(500).json({ success: false, error: result.error });
       }
     } catch (error: any) {
       console.error('Error in withdrawFees controller:', error);
@@ -280,10 +430,7 @@ class DelegationController {
       }
     } catch (error) {
       console.error('Error in getDelegatorRewards:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
 
@@ -400,15 +547,11 @@ class DelegationController {
           error: result.error
         });
       }
-    } catch (error) {
-      console.error('Error in calculateYield:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
+    } catch (error: any) {
+      console.error('Error in calculateYield controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
-
 }
 
 export const delegationController = new DelegationController();
