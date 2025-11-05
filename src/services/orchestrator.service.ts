@@ -1,5 +1,11 @@
 import { GraphQLClient } from 'graphql-request';
 import { orchestratorYieldData } from '../utils/orchestrator';
+import { ethers } from 'ethers';
+
+// Shared provider for ENS lookups (uses RPC_URL or ETH_RPC_URL). If no URL is set, provider is null.
+export const l1Provider: ethers.JsonRpcProvider | null = (process.env.RPC_URL || process.env.ETH_RPC_URL)
+  ? new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.ETH_RPC_URL)
+  : null;
 
 interface QueryParams {
   page: number;
@@ -95,33 +101,27 @@ export class OrchestratorService {
       const yieldData = Array.isArray(orchestratorYieldData) ? orchestratorYieldData : [];
       
       if (yieldData.length === 0) {
-        console.log('[DEBUG] No yield data loaded or empty array');
+        // no debug logging here
         return null;
       }
-      
-      console.log(`[DEBUG] Looking for yield data for address: ${address}, ENS: ${ensName}`);
-      console.log(`[DEBUG] Available yield data entries: ${yieldData.length}`);
       
       // First, try to match by ENS name if available
       if (ensName && !ensName.startsWith('0x')) { // Only process real ENS names, not fallback addresses
         // Try exact match first
-        console.log(`[DEBUG] Trying ENS exact match for: ${ensName}`);
         const exactMatch = yieldData.find(item => 
           item.name.toLowerCase() === ensName.toLowerCase()
         );
         if (exactMatch) {
-          console.log(`[DEBUG] Found exact ENS match: ${exactMatch.name} -> ${exactMatch.yield}%`);
           return exactMatch.yield;
         }
         
         // Remove number prefixes from ENS name (e.g., "1day-dreamer.eth" -> "day-dreamer.eth")
         const cleanEnsName = ensName.replace(/^\d+/, '');
-        console.log(`[DEBUG] Trying cleaned ENS match for: ${cleanEnsName}`);
+  
         const cleanedMatch = yieldData.find(item => 
           item.name.toLowerCase() === cleanEnsName.toLowerCase()
         );
         if (cleanedMatch) {
-          console.log(`[DEBUG] Found cleaned ENS match: ${cleanedMatch.name} -> ${cleanedMatch.yield}%`);
           return cleanedMatch.yield;
         }
         
@@ -131,7 +131,6 @@ export class OrchestratorService {
           cleanEnsName.toLowerCase().includes(item.name.toLowerCase())
         );
         if (partialMatch) {
-          console.log(`[DEBUG] Found partial ENS match: ${partialMatch.name} -> ${partialMatch.yield}%`);
           return partialMatch.yield;
         }
       }
@@ -141,8 +140,6 @@ export class OrchestratorService {
       const addressEnd = address.slice(-6).toLowerCase();
       const abbreviatedPattern = `${addressStart}...${addressEnd}`;
       
-      console.log(`[DEBUG] Trying address pattern match: ${abbreviatedPattern}`);
-      
       const addressMatch = yieldData.find(item => {
         const itemName = item.name.toLowerCase();
         const isExactMatch = itemName === abbreviatedPattern;
@@ -151,19 +148,13 @@ export class OrchestratorService {
                            itemName.includes(addressStart.slice(2)) && 
                            itemName.includes(addressEnd);
         
-        if (itemName.startsWith('0x')) {
-          console.log(`[DEBUG] Checking address ${item.name}: exact=${isExactMatch}, containsStart=${containsStart}, fullMatch=${isFullMatch}`);
-        }
-        
         return isExactMatch || containsStart || isFullMatch;
       });
       
       if (addressMatch) {
-        console.log(`[DEBUG] Found address match: ${addressMatch.name} -> ${addressMatch.yield}%`);
         return addressMatch.yield;
       }
       
-      console.log(`[DEBUG] No match found for ${address} / ${ensName}`);
       return null; // No match found
     } catch (error) {
       console.error('Error getting orchestrator yield:', error);
@@ -173,28 +164,79 @@ export class OrchestratorService {
     }
   }
 
-  async fetchENS(address: string): Promise<string | null> {
+  /**
+   * Unified ENS fetcher.
+   * - Default: returns ENS name string or null
+   * - If options.full === true: returns full metadata { name, avatar?, description?, raw }
+   * - options.force bypasses cache
+   */
+  async fetchENS(address: string, options?: { force?: boolean; full?: boolean }): Promise<string | { name: string | null; avatar?: string | null; description?: string | null; raw?: any } | null> {
     try {
-      const cacheKey = `ens:${address.toLowerCase()}`;
-      const cached = this.getFromCache<string>(cacheKey);
-      if (cached) return cached;
+      const cacheKeyName = `ens:${address.toLowerCase()}`;
+      const cacheKeyMeta = `ensmeta:${address.toLowerCase()}`;
+
+      if (!options?.force) {
+        if (options?.full) {
+          const cachedMeta = this.getFromCache<any>(cacheKeyMeta);
+          if (cachedMeta) return cachedMeta;
+        } else {
+          const cachedName = this.getFromCache<string>(cacheKeyName);
+          if (cachedName) return cachedName;
+        }
+      }
 
       const query = `
-        query getENS($address: String!) {
+        query getENSMeta($address: String!) {
           domains(where: { resolvedAddress: $address }, orderBy: createdAt, orderDirection: desc) {
             name
+            resolver {
+              address
+              
+            }
           }
         }
       `;
-      const response = await this.ensClient.request<{ domains: { name: string }[] }>(query, { address });
-      const name = response.domains?.[0]?.name || null;
 
-      // Cache ENS lookups for a longer period (configurable, default 6 hours)
-      const ensTtl = parseInt(process.env.ENS_CACHE_TTL_MS || `${6 * 60 * 60 * 1000}`, 10);
-      if (name) this.setCache(cacheKey, name, ensTtl);
+      const response = await this.ensClient.request<any>(query, { address });
+      const domain = response.domains?.[0];
+      const name = domain?.name || null;
+      const rawResolver = domain?.resolver || null;
+      let avatar: string | null = null;
+      const description: string | null = null;
+    
+      const ttl = parseInt(process.env.ENS_CACHE_TTL_MS || `${6 * 60 * 60 * 1000}`, 10);
+
+      if (options?.full) {
+        try {
+          if (l1Provider && name) {
+            try { avatar = await l1Provider.getAvatar(name); } catch (e) { /* ignore */ }
+          }
+
+          if (!avatar && rawResolver?.address && (process.env.RPC_URL || process.env.ETH_RPC_URL)) {
+            try {
+              const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.ETH_RPC_URL);
+              const resolverContract = new ethers.Contract(rawResolver.address, ['function text(bytes32 node, string key) view returns (string)'], provider);
+              const node = ethers.namehash(name || '');
+              const onchainAvatar = await resolverContract.text(node, 'avatar');
+              if (onchainAvatar) avatar = onchainAvatar;
+            } catch (e) { /* ignore */ }
+          }
+
+          const result = { name, avatar, description, raw: rawResolver };
+          // Always cache full metadata after fetching so avatars persist for list queries
+          this.setCache(cacheKeyMeta, result, ttl);
+          return result;
+        } catch (err) {
+          const result = { name, avatar, description, raw: rawResolver };
+          this.setCache(cacheKeyMeta, result, ttl);
+          return result;
+        }
+      }
+
+      if (name) this.setCache(cacheKeyName, name, ttl);
       return name;
-    } catch (error) {
-      console.error('Error fetching ENS domain:', error);
+    } catch (err) {
+      console.error('Error fetching ENS metadata:', err);
       return null;
     }
   }
@@ -215,10 +257,23 @@ export class OrchestratorService {
 
       // Fetch ENS names in parallel
       const storedENSNames: Record<string, string> = {};
+      const storedENSAvatars: Record<string, string | null> = {};
       const ensPromises = transcoders.map(async (transcoder) => {
         if (!storedENSNames[transcoder.id]) {
-          const ensName = await this.fetchENS(transcoder.id);
-          storedENSNames[transcoder.id] = ensName || `${transcoder.id.slice(0, 6)}-${transcoder.id.slice(-6)}`;
+          // Optionally force metadata fetch (useful for debugging/testing)
+          if (process.env.ENS_FORCE_FETCH === 'true') {
+            console.info(`ENS_FORCE_FETCH enabled - fetching metadata for ${transcoder.id}`);
+            const meta = await this.fetchENS(transcoder.id, { force: true, full: true }) as any;
+            const name = meta?.name || null;
+            storedENSNames[transcoder.id] = name || `${transcoder.id.slice(0, 6)}-${transcoder.id.slice(-6)}`;
+            storedENSAvatars[transcoder.id] = meta?.avatar || null;
+          } else {
+            // Fetch full metadata (cached) so we can attach avatar when available without extra RPCs later.
+            const meta = await this.fetchENS(transcoder.id, { force: false, full: true }) as any;
+            const name = meta?.name || null;
+            storedENSNames[transcoder.id] = name || `${transcoder.id.slice(0, 6)}-${transcoder.id.slice(-6)}`;
+            storedENSAvatars[transcoder.id] = meta?.avatar || null;
+          }
         }
       });
 
@@ -232,6 +287,7 @@ export class OrchestratorService {
         return {
           address: transcoder.id,
           ensName,
+          avatar: storedENSAvatars[transcoder.id] || null,
           apy,
           totalStake: parseFloat(transcoder.totalStake),
           totalVolumeETH: parseFloat(transcoder.totalVolumeETH),
@@ -293,11 +349,7 @@ export class OrchestratorService {
         enhancedTranscoders.sort((a, b) => sortComparator(a, b));
       }
 
-      console.log(`[DEBUG] Top 3 after sorting:`, enhancedTranscoders.slice(0, 3).map(t => ({
-        name: t.ensName || t.address.slice(0, 8),
-        apy: t.apy,
-        type: typeof t.apy
-      })));
+      // removed verbose debug logging of top results
 
       // Apply pagination
       const total = enhancedTranscoders.length;
@@ -354,8 +406,8 @@ export class OrchestratorService {
       }
 
       // Get ENS name for better matching
-      const ensName = await this.fetchENS(t.id);
-      
+      const ensName = (await this.fetchENS(t.id)) as string | null;
+       
       // Try to get yield from static data first
       const yieldFromData = this.getOrchestratorYield(ensName, t.id);
       
