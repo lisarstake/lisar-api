@@ -1,10 +1,6 @@
 import { supabase } from '../../config/supabase';
 import { adminTransactionService } from './transaction.service';
 import { privyService } from '../../integrations/privy/privy.service';
-import { delegationService } from '../../services/delegation.service';
-import { ethers } from 'ethers';
-import bondingManagerAbi from '../../protocols/abis/livepeer/bondingManager.abi.json';
-import { arbitrumOne, LIVEPEER_CONTRACTS } from '../../protocols/config/livepeer.config';
 
 export class AdminDashboardService {
   async getSummary(): Promise<{ success: boolean; data?: any; error?: string }> {
