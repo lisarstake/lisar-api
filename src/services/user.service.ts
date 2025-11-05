@@ -218,6 +218,7 @@ export class UserService {
     fiat_type: string;
     fiat_balance: number;
     lpt_balance: number;
+    is_onboarded: boolean;
   }>): Promise<any> {
     try {
       if (!supabase) {
