@@ -11,17 +11,22 @@ export interface Transaction {
   token_symbol?: string;
   wallet_address?: string;
   wallet_id?: string;
+  // Optional on-chain/event timestamp (ISO string)
+  transaction_timestamp?: string;
   status: 'pending' | 'confirmed' | 'failed';
   source: 'privy_webhook' | 'manual' | 'api' | 'delegation_api';
   svix_id?: string;
   created_at: string;
 }
 
+// Input type for creating transactions. created_at may be provided (optional) by caller.
+export type CreateTransactionInput = Omit<Transaction, 'id' | 'created_at'> & { created_at?: string };
+
 export class TransactionService {
   /**
    * Create a new transaction record
    */
-  async createTransaction(transactionData: Omit<Transaction, 'id' | 'created_at'>): Promise<{
+  async createTransaction(transactionData: CreateTransactionInput): Promise<{
     success: boolean;
     data?: Transaction;
     error?: string;
@@ -35,7 +40,8 @@ export class TransactionService {
       const transaction: Transaction = {
         id: transactionId,
         ...transactionData,
-        created_at: new Date().toISOString(),
+        // allow caller-specified created_at (e.g., controllers) otherwise default to now
+        created_at: transactionData.created_at ?? new Date().toISOString(),
       };
 
       const { data, error } = await supabase
