@@ -1,6 +1,5 @@
 import { GraphQLClient } from 'graphql-request';
-import { calculateROI, getMonthsForTimeHorizon } from '../utils/roi';
-const orchestratorYieldData = require('../utils/orchestrator.json');
+import { orchestratorYieldData } from '../utils/orchestrator';
 
 interface QueryParams {
   page: number;

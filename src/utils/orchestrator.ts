@@ -1,4 +1,4 @@
-[
+export const orchestratorYieldData: Array<{ name: string; yield: number }> = [
   {
     "name": "day-dreamer.eth",
     "yield": 67.7
@@ -400,3 +400,5 @@
     "yield": 0.0
   }
 ]
+
+export default orchestratorYieldData;
