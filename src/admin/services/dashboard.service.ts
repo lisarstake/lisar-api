@@ -1,17 +1,42 @@
 import { supabase } from '../../config/supabase';
 import { adminTransactionService } from './transaction.service';
 import { privyService } from '../../integrations/privy/privy.service';
+import { delegationService } from '../../services/delegation.service';
+import { ethers } from 'ethers';
+import bondingManagerAbi from '../../protocols/abis/livepeer/bondingManager.abi.json';
+import { arbitrumOne, LIVEPEER_CONTRACTS } from '../../protocols/config/livepeer.config';
 
 export class AdminDashboardService {
   async getSummary(): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       if (!supabase) return { success: false, error: 'Database connection not available' };
 
-      // Total delegators (users with positive LPT balance)
-      const { count: totalDelegators } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .gt('lpt_balance', 0);
+      // Total delegators: prefer fast DB count using is_staker (added by migration). Fallback to scanning users if column missing.
+      let totalDelegators = 0;
+      try {
+        const { data: stakerCountRes, error: stakerCountErr } = await supabase
+          .from('users')
+          .select('is_staker', { count: 'exact', head: true })
+          .eq('is_staker', true);
+
+        if (!stakerCountErr) {
+          totalDelegators = (stakerCountRes as any)?.count || 0;
+        } else {
+          // Fallback for older schemas: count users with non-null wallet_address
+          const { count: fallbackCount } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .not('wallet_address', 'is', null);
+          totalDelegators = fallbackCount || 0;
+        }
+      } catch (err) {
+        console.error('Error reading is_staker from DB, falling back to full scan:', err);
+        const { count: fallbackCount } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .not('wallet_address', 'is', null);
+        totalDelegators = fallbackCount || 0;
+      }
 
       // Total LPT delegated (sum of confirmed delegation transactions)
       const { data: delegatedRows } = await supabase
@@ -40,20 +65,15 @@ export class AdminDashboardService {
         }
       }
 
-      // Total rewards distributed (approx NGN) — placeholder: sum of transactions marked as rewards
-      const { data: rewardsRows } = await supabase
-        .from('transactions')
-        .select('amount, metadata')
-        .eq('transaction_type', 'reward')
-        .eq('status', 'confirmed');
 
-      let totalRewardsNgn = 0;
-      if (rewardsRows && rewardsRows.length) {
-        for (const r of rewardsRows) {
-          const meta = r.metadata || {};
-          const fiat = meta?.fiat_amount || meta?.ngn_amount || meta?.ngn || null;
-          if (fiat) totalRewardsNgn += parseFloat(fiat as any) || 0;
-        }
+
+      // Validators counts
+      let totalValidators = 0;
+      try {
+        const { count: vTotal } = await supabase.from('validators').select('*', { count: 'exact', head: true });
+        totalValidators = vTotal || 0;
+      } catch (e) {
+        console.warn('Could not fetch total validators count:', e);
       }
 
       return {
@@ -62,7 +82,7 @@ export class AdminDashboardService {
           totalDelegators: totalDelegators || 0,
           totalNgNConverted: totalNgnConverted || 0,
           totalLptDelegated,
-          totalRewardsDistributedNgn: totalRewardsNgn || 0,
+          totalValidators,
           lastUpdated: new Date().toISOString()
         }
       };
@@ -76,9 +96,11 @@ export class AdminDashboardService {
     try {
       if (!supabase) return { success: false, error: 'Database connection not available' };
 
+      // only delegation / undelegation / withdrawal / deposit transactions
       const { data, error } = await supabase
         .from('transactions')
-        .select(`*, users (user_id, privy_user_id, wallet_address)`)
+        .select(`*, users (wallet_address)`)
+        .in('transaction_type', ['delegation', 'undelegation', 'withdrawal', 'deposit'])
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -87,7 +109,38 @@ export class AdminDashboardService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: data || [] };
+      const mapped = (data || []).map((r: any) => {
+        const address = r.users?.wallet_address || r.wallet_address || null;
+        const amt = r.amount ?? (r.metadata?.amount ?? null) ?? '0';
+        let event = 'unknown';
+        let description = '';
+
+        if (r.transaction_type === 'delegation') {
+          event = 'bond';
+          description = `bonded ${amt}`;
+        } else if (r.transaction_type === 'undelegation') {
+          event = 'unbond';
+          description = `unbonded ${amt}`;
+        } else if (r.transaction_type === 'withdrawal') {
+          event = 'withdraw';
+          description = `withdrawn ${amt}`;
+        } else if (r.transaction_type === 'deposit') {
+          event = 'deposit';
+          description = `deposited ${amt}`;
+        }
+
+        const date = r.transaction_timestamp || r.created_at || null;
+
+        return {
+          address,
+          event,
+          description,
+          date,
+          transaction_hash: r.transaction_hash || null
+        };
+      });
+
+      return { success: true, data: mapped };
     } catch (error: any) {
       console.error('Error in AdminDashboardService.getRecentTransactions:', error);
       return { success: false, error: 'Failed to fetch recent transactions' };
