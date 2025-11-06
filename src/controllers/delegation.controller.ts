@@ -520,11 +520,12 @@ class DelegationController {
         }
       }
 
-      // Validate currency if provided
-      if (currency && !['USD', 'EUR', 'GBP'].includes(currency)) {
+      // Validate currency if provided (supported: USD, GBP, NGN, LPT)
+      const supportedCurrencies = ['USD', 'GBP', 'NGN', 'LPT'];
+      if (currency && !supportedCurrencies.includes(currency)) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid currency. Must be one of: USD, EUR, GBP'
+          error: `Invalid currency. Must be one of: ${supportedCurrencies.join(', ')}`
         });
       }
 
@@ -533,7 +534,7 @@ class DelegationController {
         apy: numericApy,
         period: period as '1 day' | '1 week' | '1 month' | '6 months' | '1 year' | undefined,
         includeCurrencyConversion: includeCurrencyConversion === true,
-        currency: currency as 'USD' | 'EUR' | 'GBP' || 'USD'
+        currency: (currency as 'USD' | 'GBP' | 'NGN' | 'LPT') || 'USD'
       });
 
       if (result.success) {

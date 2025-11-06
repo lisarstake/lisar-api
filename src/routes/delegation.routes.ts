@@ -1079,8 +1079,8 @@ router.get('/:delegator/transactions',verifyAuth, (req, res) => delegationContro
  *                 default: false
  *               currency:
  *                 type: string
- *                 enum: ['USD', 'EUR', 'GBP']
- *                 description: Currency for market value conversion (if includeCurrencyConversion is true)
+ *                 enum: ['USD', 'GBP', 'NGN', 'LPT']
+ *                 description: Currency for input/display and market value conversion. Use 'LPT' to provide amount in LPT units; otherwise provide a fiat code (e.g. USD, GBP, NGN).
  *                 example: 'USD'
  *                 default: 'USD'
  *     responses:
@@ -1145,30 +1145,30 @@ router.get('/:delegator/transactions',verifyAuth, (req, res) => delegationContro
  *                                 example: 667.5
  *                     marketValue:
  *                       type: object
- *                       description: Market value conversion (only if includeCurrencyConversion is true)
+ *                       description: Market value conversion (only if includeCurrencyConversion is true). `lptPrice` is the LPT price expressed in the chosen currency. For USD it is the USD price; for other fiat codes it is the price in that fiat. `exchangeRate` is provided when applicable (e.g. USD->GBP), otherwise omitted for LPT or base-currency cases.
  *                       properties:
  *                         currency:
  *                           type: string
  *                           example: 'USD'
  *                         lptPrice:
  *                           type: number
- *                           description: Current LPT price in USD
+ *                           description: Current LPT price in the requested currency
  *                           example: 12.50
  *                         exchangeRate:
  *                           type: number
- *                           description: USD to target currency rate (omitted for USD)
+ *                           description: Conversion rate relative to USD (omitted for USD or when not applicable)
  *                           example: 0.85
  *                         initialMarketValue:
  *                           type: number
- *                           description: Initial amount in target currency
+ *                           description: Initial amount in the requested currency (amount * lptPrice when input was LPT, or equal to input when fiat was provided)
  *                           example: 12500
  *                         finalMarketValue:
  *                           type: number
- *                           description: Final amount in target currency
+ *                           description: Final amount in the requested currency after compounding
  *                           example: 13167.5
  *                         rewardMarketValue:
  *                           type: number
- *                           description: Rewards in target currency
+ *                           description: Rewards in the requested currency
  *                           example: 667.5
  *       400:
  *         description: Bad request - invalid parameters
