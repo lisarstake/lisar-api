@@ -2,7 +2,7 @@ import { Router } from 'express';
 import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
 import { adminAuth } from '../middleware/admin.middleware';
-import { adminLogin, createAdmin } from '../controllers/auth.controller';
+import { adminLogin, createAdmin, refreshToken, revokeRefreshToken } from '../controllers/auth.controller';
 import dashboardRoutes from './dashboard.routes';
 import validatorRoutes from './validator.routes';
 
@@ -141,15 +141,98 @@ router.get('/me', adminAuth, (req: any, res): void => {
  *                 success:
  *                   type: boolean
  *                   example: true
- *                 token:
+ *                 accessToken:
  *                   type: string
  *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 refreshToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 expiresIn:
+ *                   type: number
+ *                   example: 900
  *       401:
  *         description: Invalid email or password
  *       403:
  *         description: Admin account is inactive
  */
 router.post('/login', adminLogin);
+
+// Admin refresh token route
+/**
+ * @swagger
+ * /admin/refresh:
+ *   post:
+ *     summary: Refresh admin access token
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: New access token generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 accessToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 expiresIn:
+ *                   type: number
+ *                   example: 900
+ *       400:
+ *         description: Refresh token is required
+ *       401:
+ *         description: Invalid or expired refresh token
+ */
+router.post('/refresh', refreshToken);
+
+// Admin revoke refresh token route
+/**
+ * @swagger
+ * /admin/revoke:
+ *   post:
+ *     summary: Revoke admin refresh token (logout)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Refresh token revoked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Refresh token revoked successfully
+ *       400:
+ *         description: Refresh token is required
+ */
+router.post('/revoke', revokeRefreshToken);
 
 // Admin creation route
 /**
