@@ -6,12 +6,10 @@ dotenv.config();
 
 // Use host-only base URL; service will call the full path.
 const baseURL = process.env.ONRAMP_API_URL || 'https://api.onramp.money';
-console.log('Onramp Axios baseURL:', baseURL);
+
 
 const ONRAMP_API_KEY = process.env.ONRAMP_API_KEY || '';
 const ONRAMP_API_SECRET = process.env.ONRAMP_API_SECRET || '';
-console.log("ONRAMP_API_KEY",ONRAMP_API_KEY);
-console.log("ONRAMP_API_SECRET",ONRAMP_API_SECRET);
 
 export const axiosInstance = axios.create({
   baseURL,
@@ -28,11 +26,11 @@ axiosInstance.interceptors.request.use(
   (config) => {
         console.log("here")
     try {
-    //   if (!ONRAMP_API_KEY || !ONRAMP_API_SECRET) return config;
+     if (!ONRAMP_API_KEY || !ONRAMP_API_SECRET) return config;
 
-      // Determine body to sign - prefer config.data
+
       const body = config.data ?? {};
-      console.log(body,ONRAMP_API_KEY,ONRAMP_API_SECRET)
+
       const payloadObj = {
         timestamp: new Date().getTime(),
         body,
@@ -40,7 +38,7 @@ axiosInstance.interceptors.request.use(
 
       const payload = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
       let signature = CryptoJS.enc.Hex.stringify(CryptoJS.HmacSHA512(payload, ONRAMP_API_SECRET));
-      console.log('Generated onramp signature:', signature);
+   
       // merge headers safely; cast to any to satisfy AxiosHeaders typing
       (config.headers as any) = {
         ...((config.headers as any) || {}),
