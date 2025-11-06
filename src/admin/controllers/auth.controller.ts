@@ -96,16 +96,158 @@ export const adminLogin = async (req: Request, res: Response): Promise<Response>
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
+    // Generate access token (short-lived)
+    const accessToken = jwt.sign(
       { id: admin.id, email: admin.email, role: admin.role },
       process.env.SUPABASE_JWT_SECRET || 'your-supabase-jwt-secret',
-      { expiresIn: '1h' }
+      { expiresIn: '15m' } // 15 minutes
     );
 
-    return res.json({ success: true, token });
+    // Generate refresh token (long-lived)
+    const refreshToken = jwt.sign(
+      { id: admin.id, email: admin.email, type: 'refresh' },
+      process.env.SUPABASE_JWT_SECRET || 'your-supabase-jwt-secret',
+      { expiresIn: '7d' } // 7 days
+    );
+
+    // Store refresh token in database
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+    const { error: tokenError } = await supabase
+      .from('admin_refresh_tokens')
+      .insert([
+        {
+          admin_id: admin.id,
+          token: refreshToken,
+          expires_at: expiresAt.toISOString(),
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+    if (tokenError) {
+      console.error('Error storing refresh token:', tokenError);
+      // Continue anyway - user can still use access token
+    }
+
+    return res.json({ 
+      success: true, 
+      accessToken,
+      refreshToken,
+      expiresIn: 900 // 15 minutes in seconds
+    });
   } catch (error) {
     console.error('Admin login error:', error);
+    return res.status(500).json({ success: false, error: 'Unexpected error occurred.' });
+  }
+};
+
+export const refreshToken = async (req: Request, res: Response): Promise<Response> => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, error: 'Refresh token is required' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Supabase instance is not initialized.',
+      });
+    }
+
+    // Verify refresh token
+    let decoded: any;
+    try {
+      decoded = jwt.verify(
+        refreshToken,
+        process.env.SUPABASE_JWT_SECRET || 'your-supabase-jwt-secret'
+      );
+    } catch (err) {
+      return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+    }
+
+    // Check if it's a refresh token
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ success: false, error: 'Invalid token type' });
+    }
+
+    // Check if refresh token exists in database and is not expired
+    const { data: storedToken, error: fetchError } = await supabase
+      .from('admin_refresh_tokens')
+      .select('*')
+      .eq('admin_id', decoded.id)
+      .eq('token', refreshToken)
+      .gt('expires_at', new Date().toISOString())
+      .eq('revoked', false)
+      .maybeSingle();
+
+    if (fetchError || !storedToken) {
+      return res.status(401).json({ success: false, error: 'Refresh token not found or expired' });
+    }
+
+    // Fetch admin details
+    const { data: admin, error: adminError } = await supabase
+      .from('admins')
+      .select('id, email, role, is_active')
+      .eq('id', decoded.id)
+      .maybeSingle();
+
+    if (adminError || !admin) {
+      return res.status(401).json({ success: false, error: 'Admin not found' });
+    }
+
+    if (!admin.is_active) {
+      return res.status(403).json({ success: false, error: 'Admin account is inactive' });
+    }
+
+    // Generate new access token
+    const accessToken = jwt.sign(
+      { id: admin.id, email: admin.email, role: admin.role },
+      process.env.SUPABASE_JWT_SECRET || 'your-supabase-jwt-secret',
+      { expiresIn: '15m' }
+    );
+
+    return res.json({
+      success: true,
+      accessToken,
+      expiresIn: 900 // 15 minutes in seconds
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    return res.status(500).json({ success: false, error: 'Unexpected error occurred.' });
+  }
+};
+
+export const revokeRefreshToken = async (req: Request, res: Response): Promise<Response> => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, error: 'Refresh token is required' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Supabase instance is not initialized.',
+      });
+    }
+
+    // Update the token to mark it as revoked
+    const { error: revokeError } = await supabase
+      .from('admin_refresh_tokens')
+      .update({ revoked: true, revoked_at: new Date().toISOString() })
+      .eq('token', refreshToken);
+
+    if (revokeError) {
+      return res.status(500).json({ success: false, error: 'Error revoking refresh token' });
+    }
+
+    return res.json({ success: true, message: 'Refresh token revoked successfully' });
+  } catch (error) {
+    console.error('Revoke refresh token error:', error);
     return res.status(500).json({ success: false, error: 'Unexpected error occurred.' });
   }
 };
