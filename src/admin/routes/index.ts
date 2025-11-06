@@ -2,7 +2,15 @@ import { Router } from 'express';
 import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
 import { adminAuth } from '../middleware/admin.middleware';
-import { adminLogin, createAdmin, refreshToken, revokeRefreshToken } from '../controllers/auth.controller';
+import { 
+  adminLogin, 
+  createAdmin, 
+  refreshToken, 
+  revokeRefreshToken,
+  requestPasswordReset,
+  verifyResetToken,
+  resetPassword
+} from '../controllers/auth.controller';
 import dashboardRoutes from './dashboard.routes';
 import validatorRoutes from './validator.routes';
 
@@ -286,6 +294,122 @@ router.post('/revoke', revokeRefreshToken);
  *         description: Internal server error
  */
 router.post('/create', createAdmin);
+
+// Admin password reset request route
+/**
+ * @swagger
+ * /admin/password-reset/request:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: admin@example.com
+ *     responses:
+ *       200:
+ *         description: Reset email sent (if account exists)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: If an account exists with this email, a password reset link has been sent.
+ *       400:
+ *         description: Email is required
+ */
+router.post('/password-reset/request', requestPasswordReset);
+
+// Admin verify reset token route
+/**
+ * @swagger
+ * /admin/password-reset/verify:
+ *   post:
+ *     summary: Verify password reset token
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Reset token is valid
+ *                 email:
+ *                   type: string
+ *                   example: admin@example.com
+ *       401:
+ *         description: Invalid or expired reset token
+ */
+router.post('/password-reset/verify', verifyResetToken);
+
+// Admin reset password route
+/**
+ * @swagger
+ * /admin/password-reset/reset:
+ *   post:
+ *     summary: Reset password with token
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *               newPassword:
+ *                 type: string
+ *                 example: newSecurePassword123
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Password has been reset successfully. Please login with your new password.
+ *       400:
+ *         description: Token and new password are required
+ *       401:
+ *         description: Invalid or expired reset token
+ */
+router.post('/password-reset/reset', resetPassword);
 
 // Mount user management routes
 router.use('/users', userRoutes);
