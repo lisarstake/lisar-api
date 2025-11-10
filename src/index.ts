@@ -19,7 +19,8 @@ app.use(express.urlencoded({ extended: true }));
 // CORS - allow frontend clients (adjust origins as needed)
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
-  'https://lisarstake.com'
+  'https://lisarstake.com',
+  'https://admin.lisarstake.com'
 ];
 // app.use(cors({
 //   origin: (origin, callback) => {
