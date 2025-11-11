@@ -10,6 +10,7 @@ import transactionRoutes from './transaction.routes';
 import adminRoutes from '../admin/routes';
 import protocolRoutes from './protocol.routes';
 import earnerRoutes from './earner.routes';
+import notificationRoutes from './notification.routes';
 
 const router = Router();
 
@@ -35,6 +36,9 @@ router.use('/protocol', protocolRoutes);
 
 // Mount transaction routes
 router.use('/transactions', transactionRoutes);
+
+// Mount notification routes
+router.use('/notifications', notificationRoutes);
 
 // Mount admin routes
 router.use('/admin', adminRoutes);
