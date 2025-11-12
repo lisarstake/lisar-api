@@ -42,6 +42,7 @@ class DelegationController {
       );
 
       if (result.success) {
+         console.log('Delegation successful, txHash:', result.txHash);
         // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
         (async () => {
           try {
@@ -73,10 +74,10 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
-
+               console.log('Transaction record creation result:', txCreateResult);
             if (!txCreateResult.success) {
               console.error('Failed to create delegation transaction record:', txCreateResult.error);
             }
@@ -196,7 +197,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
@@ -272,7 +273,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
@@ -355,7 +356,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
