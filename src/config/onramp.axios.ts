@@ -10,7 +10,7 @@ const baseURL = process.env.ONRAMP_API_URL || 'https://api.onramp.money';
 
 const ONRAMP_API_KEY = process.env.ONRAMP_API_KEY || '';
 const ONRAMP_API_SECRET = process.env.ONRAMP_API_SECRET || '';
-
+console.log(ONRAMP_API_KEY,ONRAMP_API_SECRET,baseURL)
 export const axiosInstance = axios.create({
   baseURL,
   timeout: Number(process.env.AXIOS_TIMEOUT_MS || 10000),
