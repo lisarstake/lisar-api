@@ -4,6 +4,7 @@ import { protocolService } from './protocol.service';
 import { ethers } from 'ethers';
 import { arbitrumOne, LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
 import bondingManagerAbi from '../protocols/abis/livepeer/bondingManager.abi.json';
+import coinGeckoService from '../integrations/coingecko.service';
 
 export class DelegationService {
   private graphqlEndpoint: string;
@@ -345,127 +346,146 @@ export class DelegationService {
     apy: number | string;
     period?: '1 day' | '1 week' | '1 month' | '6 months' | '1 year';
     includeCurrencyConversion?: boolean;
-    currency?: 'USD' | 'EUR' | 'GBP';
+    // Input/display currency for amount and results. Supported: 'USD','NGN','GBP','LPT'
+    currency?: 'USD' | 'NGN' | 'GBP' | 'LPT';
   }): Promise<{
-    success: boolean;
-    data?: {
-      initialAmount: number;
-      apy: number;
-      marketValue?: {
-        currency: string;
-        lptPrice?: number;
-        exchangeRate?: number;
-      };
-      periods: Array<{
-        period: string;
-        finalAmount: number;
-        rewardAmount: number;
-        compoundingPeriods: number;
-        periodicRate: number;
-        marketValue?: {
-          finalMarketValue: number;
-          rewardMarketValue: number;
-        };
-      }>;
-    };
-    error?: string;
-  }> {
-    try {
+     success: boolean;
+     data?: {
+       initialAmount: number;
+       apy: number;
+       marketValue?: {
+         currency: string;
+         lptPrice?: number;
+         exchangeRate?: number;
+       };
+       periods: Array<{
+         period: string;
+         finalAmount: number;
+         rewardAmount: number;
+         compoundingPeriods: number;
+         periodicRate: number;
+         marketValue?: {
+           finalMarketValue: number;
+           rewardMarketValue: number;
+         };
+       }>;
+     };
+     error?: string;
+   }> {
+     try {
       const { amount, apy: apyInput, period, includeCurrencyConversion = false, currency = 'USD' } = params;
 
-      // Parse APY - handle both string ("62%") and number formats
-      let apy: number;
-      if (typeof apyInput === 'string') {
-        // Remove '%' and parse as number
-        apy = parseFloat(apyInput.replace('%', ''));
-      } else {
-        apy = apyInput;
-      }
+       // Parse APY - handle both string ("62%") and number formats
+       let apy: number;
+       if (typeof apyInput === 'string') {
+         // Remove '%' and parse as number
+         apy = parseFloat(apyInput.replace('%', ''));
+       } else {
+         apy = apyInput;
+       }
 
-      // Validate inputs
-      if (amount <= 0) {
-        return { success: false, error: "Amount must be greater than 0" };
-      }
-      if (apy <= 0) {
-        return { success: false, error: "APY must be greater than 0" };
-      }
+       // Validate inputs
+       if (amount <= 0) {
+         return { success: false, error: "Amount must be greater than 0" };
+       }
+       if (apy <= 0) {
+         return { success: false, error: "APY must be greater than 0" };
+       }
 
-      // Define all periods if none specified
-      const allPeriods = ['1 day', '1 week', '1 month', '6 months', '1 year'] as const;
-      const periodsToCalculate = period ? [period] : allPeriods;
+       // Define all periods if none specified
+       const allPeriods = ['1 day', '1 week', '1 month', '6 months', '1 year'] as const;
+       const periodsToCalculate = period ? [period] : allPeriods;
 
-      // Get market value info once if currency conversion is needed
-      let marketValueInfo: {
-        currency: string;
-        lptPrice?: number;
-        exchangeRate?: number;
-      } | undefined;
-
-      if (includeCurrencyConversion && currency) {
+       // Get market value info once if currency conversion is needed
+      let marketValueInfo: { currency: string; lptPrice?: number; exchangeRate?: number } | undefined;
+      const inputCurrency = (currency || 'USD').toUpperCase();
+      
+      // Always get LPT price when currency is specified or conversion is requested
+      if (inputCurrency !== 'LPT') {
         try {
-          const tempMarketValue = await this.calculateMarketValue(amount, amount, currency);
-          marketValueInfo = {
-            currency: tempMarketValue.currency,
-            lptPrice: tempMarketValue.lptPrice,
-            exchangeRate: tempMarketValue.exchangeRate
-          };
-        } catch (conversionError) {
-          console.error("Currency conversion failed:", conversionError);
-          // Continue without currency conversion
+          const lptPrice = await coinGeckoService.getLPTPriceInCurrency(inputCurrency);
+          const usdPrice = inputCurrency === 'USD' ? lptPrice : await coinGeckoService.getLPTPriceInCurrency('USD');
+          const exchangeRate = inputCurrency === 'USD' ? undefined : lptPrice / usdPrice;
+          marketValueInfo = { currency: inputCurrency, lptPrice, exchangeRate };
+        } catch (convErr) {
+          console.error('Currency conversion failed:', convErr);
+          return { success: false, error: `Failed to fetch ${inputCurrency} price for LPT` };
         }
       }
 
-      // Calculate yields for all specified periods
-      const periods = periodsToCalculate.map(periodItem => {
-        // Calculate compounding periods based on Livepeer's round duration (21 hours 40 minutes)
-        const periodInDays = this.getPeriodInDays(periodItem);
-        const compoundingPeriodDays = (21 + 40 / 60) / 24; // Convert to days
-        const compoundingPeriods = periodInDays / compoundingPeriodDays;
+       // Calculate yields for all specified periods
+         const periods = periodsToCalculate.map(periodItem => {
+         // Calculate compounding periods based on Livepeer's round duration (21 hours 40 minutes)
+         const periodInDays = this.getPeriodInDays(periodItem);
+         const compoundingPeriodDays = (21 + 40 / 60) / 24; // Convert to days
+         const compoundingPeriods = periodInDays / compoundingPeriodDays;
 
-        // Calculate periodic rate
-        const annualRate = apy / 100;
-        const periodicRate = Math.pow(1 + annualRate, compoundingPeriodDays / 365) - 1;
+         // Calculate periodic rate
+         const annualRate = apy / 100;
+         const periodicRate = Math.pow(1 + annualRate, compoundingPeriodDays / 365) - 1;
 
-        // Calculate future value using compound interest formula
-        const finalAmount = amount * Math.pow(1 + periodicRate, compoundingPeriods);
-        const rewardAmount = finalAmount - amount;
-
-        const periodResult: any = {
-          period: periodItem,
-          finalAmount,
-          rewardAmount,
-          compoundingPeriods,
-          periodicRate
-        };
-
-        // Add market value if available
-        if (marketValueInfo) {
-          const finalMarketValue = finalAmount * (marketValueInfo.lptPrice || 0) * (marketValueInfo.exchangeRate || 1);
-          const initialMarketValue = amount * (marketValueInfo.lptPrice || 0) * (marketValueInfo.exchangeRate || 1);
-          
-          periodResult.marketValue = {
-            finalMarketValue,
-            rewardMarketValue: finalMarketValue - initialMarketValue
-          };
+        // Determine principal in LPT units
+        let principalLPT: number;
+        if (inputCurrency === 'LPT') {
+          principalLPT = amount;
+        } else {
+          const price = marketValueInfo?.lptPrice || 0;
+          principalLPT = price > 0 ? amount / price : 0;
         }
 
-        return periodResult;
-      });
+        // Compute amounts in LPT then convert back to input/display currency
+        const finalAmountLPT = principalLPT * Math.pow(1 + periodicRate, compoundingPeriods);
+        const rewardAmountLPT = finalAmountLPT - principalLPT;
+        
+        // Convert to display currency
+        let finalAmount: number;
+        let rewardAmount: number;
+        
+        if (inputCurrency === 'LPT') {
+          finalAmount = finalAmountLPT;
+          rewardAmount = rewardAmountLPT;
+        } else {
+          const displayPrice = marketValueInfo!.lptPrice!;
+          finalAmount = finalAmountLPT * displayPrice;
+          rewardAmount = rewardAmountLPT * displayPrice;
+        }
 
-      return {
-        success: true,
-        data: {
+         const periodResult: any = {
+           period: periodItem,
+           finalAmount,
+           rewardAmount,
+           compoundingPeriods,
+           periodicRate
+         };
+
+         // Add market value details for fiat currencies
+         if (marketValueInfo) {
+          periodResult.marketValue = {
+            lptPrice: marketValueInfo.lptPrice,
+            exchangeRate: marketValueInfo.exchangeRate,
+            principalInLPT: principalLPT,
+            finalAmountInLPT: finalAmountLPT,
+            rewardAmountInLPT: rewardAmountLPT
+          };
+         }
+
+         return periodResult;
+       });
+
+       return {
+         success: true,
+         data: {
           initialAmount: amount,
           apy,
           marketValue: marketValueInfo,
           periods
-        }
-      };
-    } catch (error) {
-      console.error("Error calculating yield:", error);
-      return { success: false, error: "Failed to calculate yield" };
-    }
-  }
+         }
+       };
+     } catch (error) {
+       console.error("Error calculating yield:", error);
+       return { success: false, error: "Failed to calculate yield" };
+     }
+   }
 
   // Helper method to convert period string to days
   private getPeriodInDays(period: string): number {

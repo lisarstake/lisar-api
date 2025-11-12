@@ -42,6 +42,7 @@ class DelegationController {
       );
 
       if (result.success) {
+         console.log('Delegation successful, txHash:', result.txHash);
         // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
         (async () => {
           try {
@@ -73,10 +74,10 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
-
+               console.log('Transaction record creation result:', txCreateResult);
             if (!txCreateResult.success) {
               console.error('Failed to create delegation transaction record:', txCreateResult.error);
             }
@@ -196,7 +197,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
@@ -272,7 +273,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
@@ -355,7 +356,7 @@ class DelegationController {
               token_symbol: 'LPT',
               wallet_address: walletAddress,
               wallet_id: walletId,
-              status: 'pending',
+              status: 'confirmed',
               source: 'delegation_api'
             });
 
@@ -520,11 +521,12 @@ class DelegationController {
         }
       }
 
-      // Validate currency if provided
-      if (currency && !['USD', 'EUR', 'GBP'].includes(currency)) {
+      // Validate currency if provided (supported: USD, GBP, NGN, LPT)
+      const supportedCurrencies = ['USD', 'GBP', 'NGN', 'LPT'];
+      if (currency && !supportedCurrencies.includes(currency)) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid currency. Must be one of: USD, EUR, GBP'
+          error: `Invalid currency. Must be one of: ${supportedCurrencies.join(', ')}`
         });
       }
 
@@ -533,7 +535,7 @@ class DelegationController {
         apy: numericApy,
         period: period as '1 day' | '1 week' | '1 month' | '6 months' | '1 year' | undefined,
         includeCurrencyConversion: includeCurrencyConversion === true,
-        currency: currency as 'USD' | 'EUR' | 'GBP' || 'USD'
+        currency: (currency as 'USD' | 'GBP' | 'NGN' | 'LPT') || 'USD'
       });
 
       if (result.success) {

@@ -186,6 +186,34 @@ export class UserController {
       });
     }
   }
+
+  /**
+   * Update user onboarding status
+   * PATCH /users/profile/:userId/onboard
+   */
+  async updateUserOnboardStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { is_onboarded } = req.body;
+
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'User ID is required' });
+        return;
+      }
+
+      if (typeof is_onboarded !== 'boolean') {
+        res.status(400).json({ success: false, error: 'is_onboarded must be a boolean' });
+        return;
+      }
+
+      const updated = await userService.updateUserProfile(userId, { is_onboarded });
+
+      res.status(200).json({ success: true, message: 'Onboard status updated', data: updated });
+    } catch (error) {
+      console.error('Error updating onboard status:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
 }
 
 export const userController = new UserController();

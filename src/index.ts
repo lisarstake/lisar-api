@@ -5,6 +5,7 @@ import { swaggerSpec } from './config/swagger';
 import routes from './routes';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { jobScheduler } from './jobs/scheduler';
 
 // Load environment variables
 dotenv.config();
@@ -19,7 +20,8 @@ app.use(express.urlencoded({ extended: true }));
 // CORS - allow frontend clients (adjust origins as needed)
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
-
+  'https://lisarstake.com',
+  'https://admin.lisarstake.com'
 ];
 // app.use(cors({
 //   origin: (origin, callback) => {
@@ -76,6 +78,14 @@ app.listen(PORT, () => {
   console.log(`📍 Access the API at http://localhost:${PORT}`);
   console.log(`📚 API Documentation at http://localhost:${PORT}/api-docs`);
   console.log(`🔗 Supabase: ${supabase ? '✅ Connected' : '❌ Not configured'}`);
+  
+  // Start background job scheduler
+  if (process.env.ENABLE_JOBS !== 'false') {
+    console.log('🕐 Starting job scheduler...');
+    jobScheduler.start();
+  } else {
+    console.log('⏸️  Job scheduler is disabled (ENABLE_JOBS=false)');
+  }
 });
 
 export default app;
