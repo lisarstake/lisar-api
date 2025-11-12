@@ -37,6 +37,7 @@ axiosInstance.interceptors.request.use(
       };
 
       const payload = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
+      console
       let signature = CryptoJS.enc.Hex.stringify(CryptoJS.HmacSHA512(payload, ONRAMP_API_SECRET));
    
       // merge headers safely; cast to any to satisfy AxiosHeaders typing
