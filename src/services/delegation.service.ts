@@ -25,7 +25,8 @@ export class DelegationService {
     const query = GET_DELEGATOR_BY_ADDRESS_QUERY;
 
     try {
-      const response = await this.client.request<{ delegator: any }>(query, { address: delegator });
+      // The subgraph expects 'id' as the variable name and lowercased address
+      const response = await this.client.request<{ delegator: any }>(query, { address: delegator.toLowerCase() });
       return response.delegator;
     } catch (error) {
       console.error('Error fetching delegations:', error);
