@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
+import jobRoutes from './job.routes';
 import { adminAuth } from '../middleware/admin.middleware';
 import { 
   adminLogin, 
@@ -422,5 +423,8 @@ router.use('/validators', validatorRoutes);
 
 // Mount transaction management routes  
 router.use('/transactions', transactionRoutes);
+
+// Mount job management routes
+router.use('/jobs', jobRoutes);
 
 export default router;

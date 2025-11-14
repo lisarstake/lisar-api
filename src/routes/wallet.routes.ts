@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { walletController } from '../controllers/wallet.controller';
+import { verifyAuth } from '../middleware/verifyAuth';
 
 const router = Router();
 
@@ -152,18 +153,18 @@ const router = Router();
  * GET /wallet/balance
  * Route to fetch the balance of ETH or LPT for a wallet
  */
-router.get('/balance', (req, res) => walletController.getTokenBalance(req, res));
+router.get('/balance',verifyAuth, (req, res) => walletController.getTokenBalance(req, res));
 
 /**
  * GET /wallet/:walletId
  * Route to fetch a wallet by ID
  */
-router.get('/:walletId', (req, res) => walletController.getWalletById(req, res));
+router.get('/:walletId',verifyAuth, (req, res) => walletController.getWalletById(req, res));
 
 /**
  * GET /wallet/:walletId/export
  * Route to export a wallet's private key
  */
-router.get('/:walletId/export', (req, res) => walletController.exportWalletPrivateKey(req, res));
+router.get('/:walletId/export',verifyAuth, (req, res) => walletController.exportWalletPrivateKey(req, res));
 
 export default router;

@@ -292,6 +292,125 @@ export class PrivyService {
       throw new Error(formatted.userMessage);
     }
   }
+
+  /**
+   * Send a transaction using Privy's RPC API with gas sponsorship
+   * Supports both simple transfers and smart contract interactions
+   */
+  async sendTransactionWithAPI(
+    walletId: string,
+    address: `0x${string}`,
+    contractAddress: `0x${string}`,
+    abi: any,
+    functionName: string,
+    args: any[],
+    authSignature: string,
+    value: string = '0x0',
+    caip2: string = 'eip155:42161' // Arbitrum One by default
+  ): Promise<string> {
+    try {
+      if (!privyClient) {
+        throw new Error('Privy client not initialized');
+      }
+
+      const appId = process.env.PRIVY_APP_ID;
+      const appSecret = process.env.PRIVY_APP_SECRET;
+
+      if (!appId || !appSecret) {
+        throw new Error('Privy App ID or App Secret not configured');
+      }
+
+      // Encode the contract function call
+      const data = encodeFunctionData({
+        abi,
+        functionName,
+        args,
+      });
+
+      const url = `https://api.privy.io/v1/wallets/${walletId}/rpc`;
+
+      const MAX_RETRIES = 3;
+      let lastErr: any = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // Fetch latest pending nonce
+        const nonceBigInt = await publicClient.getTransactionCount({ address, blockTag: 'pending' });
+        const nonce = Number(nonceBigInt);
+
+        try {
+          console.debug(`Privy API send attempt=${attempt} nonce=${nonce} to=${contractAddress}`);
+
+          // Build transaction params
+          const transaction: any = {
+            to: contractAddress,
+            data,
+            value,
+            nonce: `0x${nonce.toString(16)}`, // Convert nonce to hex
+          };
+
+          const requestBody = {
+            method: 'eth_sendTransaction',
+            caip2,
+            sponsor: true,
+            params: {
+              transaction,
+            },
+          };
+
+          // Create Basic Auth header
+          const authToken = Buffer.from(`${appId}:${appSecret}`).toString('base64');
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Basic ${authToken}`,
+              'privy-app-id': appId,
+              'privy-authorization-signature': authSignature,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Privy RPC API error:', errorText);
+            throw new Error(`Privy RPC API failed: ${response.status} ${response.statusText}`);
+          }
+
+          const result = await response.json() as any;
+          
+          console.log('Transaction sent successfully via Privy RPC API:', result);
+
+          const hash = result.data || result.hash || result.result;
+          return hash;
+
+        } catch (err: any) {
+          lastErr = err;
+          if (isNonceTooLowError(err) && attempt < MAX_RETRIES) {
+            console.warn(`Nonce-too-low detected (attempt ${attempt}). Retrying...`);
+            await new Promise((r) => setTimeout(r, 500 * attempt));
+            continue;
+          }
+
+          const formatted = formatContractError(err);
+          console.error('Privy API tx error (userMessage):', formatted.userMessage);
+          console.error('Privy API tx error (debug):', formatted.debug.full);
+          throw new Error(formatted.userMessage);
+        }
+      }
+
+      const formatted = formatContractError(lastErr);
+      console.error('Privy API tx error (userMessage):', formatted.userMessage);
+      console.error('Privy API tx error (debug):', formatted.debug.full);
+      throw new Error(formatted.userMessage);
+
+    } catch (error: any) {
+      const formatted = formatContractError(error);
+      console.error('Privy API tx error (userMessage):', formatted.userMessage);
+      console.error('Privy API tx error (debug):', formatted.debug.full);
+      throw new Error(formatted.userMessage);
+    }
+  }
 }
 
 export const privyService = new PrivyService();
