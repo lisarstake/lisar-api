@@ -21,7 +21,9 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
   'https://lisarstake.com',
-  'https://admin.lisarstake.com'
+  'https://admin.lisarstake.com',
+  'staging.lisar.pages.dev',
+  'staging.lisar-admin.pages.dev'
 ];
 // app.use(cors({
 //   origin: (origin, callback) => {
