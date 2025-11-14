@@ -1,4 +1,4 @@
-import { PrivyWebhookEvent } from '../types/webhook.types';
+import { PrivyWebhookEvent, OnramperWebhookEvent } from '../types/webhook.types';
 import { delegationService } from '../services/delegation.service';
 import { livepeerService } from '../protocols/services/livepeer.service';
 import { supabase } from '../config/supabase';
@@ -333,6 +333,131 @@ export class WebhookService {
     });
     // TODO: Update wallet balance in database, notify user of withdrawal
   }
+
+  /**
+   * Handle Onramper webhook events
+   * Processes completed onramp transactions
+   */
+  async handleOnramperWebhook(event: OnramperWebhookEvent): Promise<void> {
+    try {
+      console.log('Processing Onramper webhook:', {
+        orderId: event.orderId,
+        status: event.status,
+        walletAddress: event.walletAddress,
+        coinCode: event.coinCode,
+        network: event.network,
+        actualCryptoAmount: event.actualCryptoAmount,
+        transactionHash: event.transactionHash
+      });
+
+      // Check for duplicate webhook processing using orderId
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+
+      const { data: existingTransaction, error: duplicateError } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('transaction_hash', event.transactionHash)
+        .eq('source', 'onramp')
+        .maybeSingle();
+
+      if (duplicateError) {
+        console.error('Error checking for duplicate Onramper webhook:', duplicateError);
+        return;
+      }
+
+      if (existingTransaction) {
+        console.log('Onramper webhook already processed, skipping orderId:', event.orderId);
+        return;
+      }
+
+      // Only process successfully completed transactions (status 4, 5, 15, 16)
+      // 4 or 15 = withdrawal complete, 5 or 16 = webhook sent
+      const successStatuses = [4, 5, 15, 16];
+      if (!successStatuses.includes(event.status)) {
+        console.log('Onramper transaction not in success status, current status:', event.status);
+        return;
+      }
+
+      // Find user by wallet address
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('user_id, wallet_address')
+        .eq('wallet_address', event.walletAddress.toLowerCase())
+        .maybeSingle();
+
+      if (userError) {
+        console.error('Error finding user by wallet address:', userError);
+        return;
+      }
+
+      if (!user) {
+        console.log('No user found with wallet address:', event.walletAddress);
+        // Still create a transaction record for tracking purposes
+      }
+
+      // Create transaction record
+      const transactionResult = await transactionService.createTransaction({
+        user_id: user?.user_id || 'unknown',
+        transaction_hash: event.transactionHash,
+        transaction_type: 'deposit',
+        amount: event.actualCryptoAmount.toString(),
+        token_address: event.coinCode,
+        token_symbol: event.coinCode.toUpperCase(),
+        wallet_address: event.walletAddress,
+        transaction_timestamp: event.createdAt,
+        status: 'confirmed',
+        source: 'onramp',
+        metadata: {
+          orderId: event.orderId,
+          eventType: event.eventType,
+          coinId: event.coinId,
+          fiatType: event.fiatType,
+          fiatAmount: event.fiatAmount,
+          paymentType: event.paymentType,
+          expectedPrice: event.expectedPrice,
+          expectedCryptoAmount: event.expectedCryptoAmount,
+          actualPrice: event.actualPrice,
+          actualCryptoAmount: event.actualCryptoAmount,
+          chainId: event.chainId,
+          network: event.network,
+          referenceId: event.referenceId,
+          kycNeeded: event.kycNeeded,
+          fees: {
+            onRampFee: event.onRampFee,
+            gasFee: event.gasFee,
+            clientFee: event.clientFee,
+            gatewayFee: event.gatewayFee
+          },
+          merchantRecognitionId: event.merchantRecognitionId,
+          webhookTrials: event.webhookTrials
+        }
+      });
+
+      if (!transactionResult.success) {
+        console.error('Error creating Onramper transaction record:', transactionResult.error);
+        throw new Error(transactionResult.error);
+      }
+
+      console.log('Onramper transaction recorded successfully:', {
+        orderId: event.orderId,
+        userId: user?.user_id,
+        transactionHash: event.transactionHash,
+        amount: event.actualCryptoAmount,
+        coinCode: event.coinCode
+      });
+
+      // TODO: Send notification to user about successful onramp transaction
+      // TODO: Update user balance if needed (depends on your business logic)
+
+    } catch (error) {
+      console.error('Error handling Onramper webhook:', error);
+      throw error;
+    }
+  }
 }
 
 export const webhookService = new WebhookService();
+

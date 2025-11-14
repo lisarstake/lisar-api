@@ -63,31 +63,38 @@ export class OnramperService {
       throw new Error(`Onramper quote error: ${JSON.stringify(e)}`);
     }
   }
+
+  async setWebhookUrl(webhookUrl: string): Promise<any> {
+    const body = {
+      webhookUrl
+    };
+
+    try {
+      const resp = await onrampAxiosInstance.post('/onramp/api/v1/merchant/setWebhookUrl', body);
+      return resp.data;
+    } catch (err: any) {
+      const e = err?.response?.data || err?.message || err;
+      throw new Error(`Onramper webhook URL update error: ${JSON.stringify(e)}`);
+    }
+  }
+
+  async sendDummyWebhook(webhookUrl?: string): Promise<any> {
+    const body: any = {};
+    
+    // If webhookUrl is provided, send to that URL, otherwise use the currently configured one
+    if (webhookUrl) {
+      body.webhookUrl = webhookUrl;
+    }
+
+    try {
+      const resp = await onrampAxiosInstance.post('/onramp/api/v1/merchant/sendDummyWebhook', body);
+      return resp.data;
+    } catch (err: any) {
+      const e = err?.response?.data || err?.message || err;
+      throw new Error(`Onramper send dummy webhook error: ${JSON.stringify(e)}`);
+    }
+  }
 }
 
 export const onramperService = new OnramperService();
 
-/*
-Usage example:
-
-import { onramperService } from '../integrations/onramper/onramper.service';
-
-const res = await onramperService.generateOrderUrl({
-  coinCode: 'usdt',
-  network: 'bep20',
-  fiatAmount: 200,
-  fiatType: 1,
-});
-console.log(res);
-
-const quote = await onramperService.getQuote({
-  coinCode: 'usdt',
-  network: 'bep20',
-  fiatAmount: 200,
-  fiatType: 1,
-});
-console.log(quote);
-
-Note: install dependencies: npm install axios crypto-js
-Set env: ONRAMP_API_KEY, ONRAMP_API_SECRET, optional ONRAMP_API_URL
-*/

@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
-import { PrivyWebhookEvent } from '../types/webhook.types';
+import { PrivyWebhookEvent, OnramperWebhookEvent } from '../types/webhook.types';
 import crypto from 'crypto';
+import CryptoJS from 'crypto-js';
 
 export class WebhookController {
   async handlePrivyWebhook(req: Request, res: Response): Promise<Response> {
@@ -31,6 +32,53 @@ export class WebhookController {
       return res.status(500).json({ error: 'Failed to process webhook' });
     }
   }
+
+  async handleOnramperWebhook(req: Request, res: Response): Promise<Response> {
+    try {
+      // Get Onramper headers
+      const payload = req.headers['x-onramp-payload'] as string;
+      const signature = req.headers['x-onramp-signature'] as string;
+      console.log('Onramper headers:', { payload, signature });
+      if (!payload || !signature) {
+        console.warn('Missing required Onramper webhook headers');
+        return res.status(401).json({ error: 'Missing required webhook headers' });
+      }
+
+      // Verify webhook signature
+      const apiSecret = process.env.ONRAMP_API_SECRET;
+      if (!apiSecret) {
+        console.error('ONRAMP_API_SECRET not configured');
+        return res.status(500).json({ error: 'Webhook verification not configured' });
+      }
+
+      const localSignature = CryptoJS.enc.Hex.stringify(
+        CryptoJS.HmacSHA512(payload, apiSecret)
+      );
+
+      if (localSignature !== signature) {
+        console.warn('Invalid Onramper webhook signature');
+        return res.status(403).json({ error: 'Invalid signature' });
+      }
+
+      // Signature verified, process the webhook
+      const event = req.body as OnramperWebhookEvent;
+      console.log('Received Onramper webhook event:', {
+        orderId: event.orderId,
+        status: event.status,
+        coinCode: event.coinCode,
+        walletAddress: event.walletAddress
+      });
+      
+      await webhookService.handleOnramperWebhook(event);
+      
+      // Respond within 5 seconds as required by Onramper
+      return res.status(200).send('Received data :)');
+    } catch (error: any) {
+      console.error('Onramper webhook handling error:', error);
+      return res.status(500).json({ error: 'Failed to process webhook' });
+    }
+  }
 }
 
 export const webhookController = new WebhookController();
+

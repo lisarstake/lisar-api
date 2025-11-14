@@ -487,6 +487,39 @@ export const GET_DELEGATOR_EVENTS_BY_TIME_PERIOD_QUERY = `
   }
 `;
 
+// Query to get reward events for a specific delegator within a time period
+export const GET_DELEGATOR_REWARD_EVENTS_QUERY = `
+  query GetDelegatorRewardEvents($delegatorId: ID!, $startTimestamp: Int!, $endTimestamp: Int!) {
+    delegator(id: $delegatorId) {
+      id
+      bondedAmount
+    }
+    rewardEvents(
+      where: {
+        delegator: $delegatorId,
+        timestamp_gte: $startTimestamp,
+        timestamp_lte: $endTimestamp
+      }
+      orderBy: timestamp
+      orderDirection: desc
+      first: 1000
+    ) {
+      id
+      rewardTokens
+      timestamp
+      round {
+        id
+      }
+      delegate {
+        id
+      }
+      delegator {
+        id
+      }
+    }
+  }
+`;
+
 // Simple query to get basic delegator info (for fallback)
 export const GET_EARNINGS_BY_TIME_PERIOD_QUERY = `
   query GetEarningsByTimePeriod($delegators: [String!]!) {

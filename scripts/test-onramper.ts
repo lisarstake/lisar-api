@@ -7,10 +7,10 @@ async function run() {
     console.log('ONRAMP_API_SECRET present?', !!process.env.ONRAMP_API_SECRET);
 
     const params = {
-     coinId: 54,   
-      coinCode: "usdt",  // (if both coinId and coinCode are passed -> coinCode takes precedence)
+      // coinId: 54,   
+      coinCode: "lpt",  // (if both coinId and coinCode are passed -> coinCode takes precedence)
       chainId: 3,    
-      network: "bep20",  //(if both chainId and network are passed -> network takes precedence)
+      network: "arbitrumOne",  //(if both chainId and network are passed -> network takes precedence)
       fiatAmount: 200, 
       fiatType: 6,     // Fiat Type from config file 1 for INR || 2 for TRY || 3 for AED || 4 for MXN etc
       type: 1   // type: 1 // default is onramp

@@ -1,6 +1,7 @@
 import { notificationService } from '../services/notification.service';
 import { userService } from '../services/user.service';
 import { GraphQLClient } from 'graphql-request';
+import { GET_DELEGATOR_REWARD_EVENTS_QUERY } from '../queries/subgraph.queries';
 
 export class RewardsNotificationJob {
   private graphqlClient: GraphQLClient;
@@ -112,11 +113,8 @@ export class RewardsNotificationJob {
   }
 
   /**
-   * Get user earnings for a specific time period from subgraph
-   * Reverse-engineered from the yield calculation logic:
-   * - Get delegator's current stake and starting stake
-   * - Calculate the difference (rewards earned)
-   * - Account for any bonds/unbonds during the period
+   * Get user earnings for a specific time period using actual RewardEvents from subgraph
+   * This is the most accurate method as it uses historical reward data directly
    */
   private async getUserEarningsForPeriod(
     walletAddress: string,
@@ -127,131 +125,70 @@ export class RewardsNotificationJob {
       const startTimestamp = Math.floor(startDate.getTime() / 1000);
       const endTimestamp = Math.floor(endDate.getTime() / 1000);
 
-      // Get delegator's current state and historical bond events
-      const query = `
-        query GetDelegatorEarnings($id: String!, $startTimestamp: Int!, $endTimestamp: Int!) {
-          delegator(id: $id) {
-            id
-            bondedAmount
-            principal
-            fees
-            delegatedAmount
-            startRound
-            lastClaimRound {
-              id
-            }
-          }
-          
-          # Get bond events in the period to track stake changes
-          bondEvents(
-            where: {
-              delegator: $id,
-              timestamp_gte: $startTimestamp,
-              timestamp_lte: $endTimestamp
-            }
-            orderBy: timestamp
-            orderDirection: asc
-          ) {
-            id
-            bondedAmount
-            additionalAmount
-            timestamp
-            round {
-              id
-            }
-          }
-          
-          # Get unbond events in the period
-          unbondEvents(
-            where: {
-              delegator: $id,
-              timestamp_gte: $startTimestamp,
-              timestamp_lte: $endTimestamp
-            }
-            orderBy: timestamp
-            orderDirection: asc
-          ) {
-            id
-            amount
-            withdrawRound
-            timestamp
-            round {
-              id
-            }
-          }
+      console.log(`[RewardsNotificationJob] Fetching rewards for ${walletAddress} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+      // Query RewardEvents directly from the subgraph
+      const result: any = await this.graphqlClient.request(
+        GET_DELEGATOR_REWARD_EVENTS_QUERY,
+        {
+          delegatorId: walletAddress.toLowerCase(),
+          startTimestamp,
+          endTimestamp
         }
-      `;
+      );
 
-      const result: any = await this.graphqlClient.request(query, {
-        id: walletAddress,
-        startTimestamp,
-        endTimestamp
-      });
-
-      if (!result.delegator) {
+      if (!result.rewardEvents || result.rewardEvents.length === 0) {
+        console.log(`[RewardsNotificationJob] No reward events found for ${walletAddress} in the period`);
         return null;
       }
 
-      const delegator = result.delegator;
-      const currentBondedAmount = parseFloat(delegator.bondedAmount || '0');
-      const principal = parseFloat(delegator.principal || '0');
-      
-      // Calculate total staked (bonded) during period
-      let totalBonded = 0;
+      console.log(`[RewardsNotificationJob] Found ${result.rewardEvents.length} reward events for ${walletAddress}`);
 
-      if (result.bondEvents) {
-         console.log('Bond events:', result.bondEvents);
-        for (const event of result.bondEvents) {
-          totalBonded += parseFloat(event.additionalAmount || '0');
-        }
-      }
-      
-      // Calculate total unbonded during period
-      let totalUnbonded = 0;
-      if (result.unbondEvents) {
-        for (const event of result.unbondEvents) {
-          totalUnbonded += parseFloat(event.amount || '0');
-        }
-      }
-      
-      // Rewards calculation:
-      // If user has bonded amount, the rewards are the growth beyond principal
-      // Rewards = (currentBonded + totalUnbonded) - (principal + totalBonded)
-      // This accounts for compounding rewards earned over time
-      
-      let totalRewards = 0;
-      
-      if (currentBondedAmount > 0 || totalUnbonded > 0) {
-        // Calculate what the stake should be without rewards
-        const expectedStake = principal + totalBonded - totalUnbonded;
-        
-        // Actual stake (including compounded rewards)
-        const actualStake = currentBondedAmount;
-        
-        // Rewards are the difference
-        totalRewards = actualStake - expectedStake;
-        
-        // Also add any unbonded amount that was rewards
-        if (totalUnbonded > 0 && totalUnbonded > principal) {
-          const unbondedRewards = totalUnbonded - principal;
-          totalRewards += Math.max(0, unbondedRewards);
-        }
+      // Sum up all rewardTokens from the events
+      let totalRewardsWei = 0;
+      const roundRewards: Map<string, number> = new Map();
+
+      for (const event of result.rewardEvents) {
+        const rewardTokens = parseFloat(event.rewardTokens || '0');
+        totalRewardsWei += rewardTokens;
+
+        // Track rewards per round for detailed logging
+        const roundId = event.round?.id || 'unknown';
+        const currentRoundReward = roundRewards.get(roundId) || 0;
+        roundRewards.set(roundId, currentRoundReward + rewardTokens);
       }
 
-      // Convert from wei to LPT
-      totalRewards = totalRewards / 1e18;
+      // Convert from wei to LPT (divide by 1e18)
+      const totalRewards = totalRewardsWei / 1e18;
+
+      // Log detailed breakdown
+      console.log(`[RewardsNotificationJob] Rewards breakdown for ${walletAddress}:`);
+      console.log(`  - Total reward events: ${result.rewardEvents.length}`);
+      console.log(`  - Total rewards (wei): ${totalRewardsWei}`);
+      console.log(`  - Total rewards (LPT): ${totalRewards.toFixed(6)}`);
+      console.log(`  - Rounds with rewards: ${roundRewards.size}`);
       
-      // Count reward events (estimate based on rounds)
-      const rewardEventsCount = result.bondEvents?.length || 0;
+      // Log top 5 rounds by rewards
+      const topRounds = Array.from(roundRewards.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      
+      if (topRounds.length > 0) {
+        console.log(`  - Top rounds:`);
+        topRounds.forEach(([roundId, reward], index) => {
+          console.log(`    ${index + 1}. Round ${roundId}: ${(reward / 1e18).toFixed(6)} LPT`);
+        });
+      }
 
       // Only return if rewards > 0
       if (totalRewards <= 0) {
+        console.log(`[RewardsNotificationJob] Total rewards is zero or negative for ${walletAddress}`);
         return null;
       }
 
       return {
-        totalRewards: totalRewards.toString(),
-        rewardEventsCount
+        totalRewards: totalRewards.toFixed(6),
+        rewardEventsCount: result.rewardEvents.length
       };
     } catch (error: any) {
       console.error(`[RewardsNotificationJob] Error fetching earnings for ${walletAddress}:`, error.message);

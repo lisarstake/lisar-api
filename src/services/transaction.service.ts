@@ -5,7 +5,7 @@ export interface Transaction {
   id: string;
   user_id: string;
   transaction_hash: string;
-  transaction_type: 'deposit' | 'withdrawal' | 'delegation' | 'undelegation';
+  transaction_type: 'deposit' | 'withdrawal' | 'delegation' | 'undelegation' | 'reward';
   amount: string;
   token_address?: string;
   token_symbol?: string;
@@ -14,8 +14,9 @@ export interface Transaction {
   // Optional on-chain/event timestamp (ISO string)
   transaction_timestamp?: string;
   status: 'pending' | 'confirmed' | 'failed';
-  source: 'privy_webhook' | 'manual' | 'api' | 'delegation_api';
+  source: 'privy_webhook' | 'manual' | 'api' | 'delegation_api' | 'onramp';
   svix_id?: string;
+  metadata?: any;
   created_at: string;
 }
 

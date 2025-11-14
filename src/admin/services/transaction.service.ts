@@ -230,8 +230,7 @@ export class AdminTransactionService {
       const { data, error } = await supabase
         .from('transactions')
         .update({
-          status,
-          updated_at: new Date().toISOString()
+          status
         })
         .eq('id', transactionId)
         .select()
