@@ -1,6 +1,9 @@
 import { notificationService } from '../services/notification.service';
 import { userService } from '../services/user.service';
 import { GraphQLClient } from 'graphql-request';
+import { GET_DELEGATOR_BY_ADDRESS_QUERY } from '../queries/subgraph.queries';
+import { delegationService } from '../services/delegation.service';
+import orchestratorYieldData from '../utils/orchestrator';
 
 export class RewardsNotificationJob {
   private graphqlClient: GraphQLClient;
@@ -75,12 +78,24 @@ export class RewardsNotificationJob {
       return;
     }
 
-    // Get user's earnings for the time period
-    const earnings = await this.getUserEarningsForPeriod(
-      walletAddress,
-      timePeriod.start,
-      timePeriod.end
-    );
+    // For daily and weekly, use APY-based estimator (no fallback to timestamp/event logic)
+    let earnings: any = null;
+    if (periodType === 'daily' || periodType === 'weekly') {
+      const estimate = await this.estimateRewardForDelegator(walletAddress, periodType);
+      if (estimate && estimate.total > 0) {
+        earnings = {
+          totalRewards: String(estimate.total),
+          rewardEventsCount: 0,
+        };
+      } else {
+        // No rewards for this user in this period
+        return;
+      }
+    } else {
+      // For other periods, no APY-based estimator or historical calculation is available
+      // Set earnings to null
+      earnings = null;
+    }
 
     if (!earnings || parseFloat(earnings.totalRewards) === 0) {
       console.log(`[RewardsNotificationJob] No rewards for user ${user.email}, ${walletAddress} in the last ${periodType} period`);
@@ -112,152 +127,87 @@ export class RewardsNotificationJob {
   }
 
   /**
-   * Get user earnings for a specific time period from subgraph
-   * Reverse-engineered from the yield calculation logic:
-   * - Get delegator's current stake and starting stake
-   * - Calculate the difference (rewards earned)
-   * - Account for any bonds/unbonds during the period
+   * Estimate daily reward for a delegator using the delegationService.calculateYield helper
+   * Steps:
+   *  - Fetch delegator via subgraph
+   *  - Get current delegate (orchestrator) id and bondedAmount
+   *  - Match orchestrator id to `orchestratorYieldData` to obtain APY
+   *  - Call delegationService.calculateYield with currency 'LPT' and period '1 day'
    */
-  private async getUserEarningsForPeriod(
+  /**
+   * Estimate reward for a delegator using the delegationService.calculateYield helper
+   * Supports 'daily' and 'weekly' periods.
+   */
+  private async estimateRewardForDelegator(
     walletAddress: string,
-    startDate: Date,
-    endDate: Date
-  ): Promise<{ totalRewards: string; rewardEventsCount: number } | null> {
+    periodType: 'daily' | 'weekly'
+  ): Promise<{
+    delegator?: string;
+    delegate?: string;
+    delegateName?: string;
+    apy?: number;
+    bondedAmountLPT?: number;
+    total: number;
+    breakdown?: Array<{
+      delegate: string;
+      delegateName?: string;
+      apy: number;
+      bondedAmountLPT: number;
+      rewardLPT: number;
+    }>;
+  } | null> {
     try {
-      const startTimestamp = Math.floor(startDate.getTime() / 1000);
-      const endTimestamp = Math.floor(endDate.getTime() / 1000);
-
-      // Get delegator's current state and historical bond events
-      const query = `
-        query GetDelegatorEarnings($id: String!, $startTimestamp: Int!, $endTimestamp: Int!) {
-          delegator(id: $id) {
-            id
-            bondedAmount
-            principal
-            fees
-            delegatedAmount
-            startRound
-            lastClaimRound {
-              id
-            }
-          }
-          
-          # Get bond events in the period to track stake changes
-          bondEvents(
-            where: {
-              delegator: $id,
-              timestamp_gte: $startTimestamp,
-              timestamp_lte: $endTimestamp
-            }
-            orderBy: timestamp
-            orderDirection: asc
-          ) {
-            id
-            bondedAmount
-            additionalAmount
-            timestamp
-            round {
-              id
-            }
-          }
-          
-          # Get unbond events in the period
-          unbondEvents(
-            where: {
-              delegator: $id,
-              timestamp_gte: $startTimestamp,
-              timestamp_lte: $endTimestamp
-            }
-            orderBy: timestamp
-            orderDirection: asc
-          ) {
-            id
-            amount
-            withdrawRound
-            timestamp
-            round {
-              id
-            }
-          }
-        }
-      `;
-
-      const result: any = await this.graphqlClient.request(query, {
-        id: walletAddress,
-        startTimestamp,
-        endTimestamp
+      const resp: any = await this.graphqlClient.request(GET_DELEGATOR_BY_ADDRESS_QUERY, {
+        address: walletAddress.toLowerCase(),
       });
 
-      if (!result.delegator) {
+      const delegator = resp?.delegator;
+      if (!delegator) return null;
+
+      const delegateId = delegator.delegate?.id;
+      const bondedAmountWei = delegator.bondedAmount || '0';
+      const bondedAmountLPT = Number(bondedAmountWei) 
+  
+      if (!delegateId || bondedAmountLPT <= 0) {
         return null;
       }
 
-      const delegator = result.delegator;
-      const currentBondedAmount = parseFloat(delegator.bondedAmount || '0');
-      const principal = parseFloat(delegator.principal || '0');
-      
-      // Calculate total staked (bonded) during period
-      let totalBonded = 0;
-
-      if (result.bondEvents) {
-         console.log('Bond events:', result.bondEvents);
-        for (const event of result.bondEvents) {
-          totalBonded += parseFloat(event.additionalAmount || '0');
-        }
-      }
-      
-      // Calculate total unbonded during period
-      let totalUnbonded = 0;
-      if (result.unbondEvents) {
-        for (const event of result.unbondEvents) {
-          totalUnbonded += parseFloat(event.amount || '0');
-        }
-      }
-      
-      // Rewards calculation:
-      // If user has bonded amount, the rewards are the growth beyond principal
-      // Rewards = (currentBonded + totalUnbonded) - (principal + totalBonded)
-      // This accounts for compounding rewards earned over time
-      
-      let totalRewards = 0;
-      
-      if (currentBondedAmount > 0 || totalUnbonded > 0) {
-        // Calculate what the stake should be without rewards
-        const expectedStake = principal + totalBonded - totalUnbonded;
-        
-        // Actual stake (including compounded rewards)
-        const actualStake = currentBondedAmount;
-        
-        // Rewards are the difference
-        totalRewards = actualStake - expectedStake;
-        
-        // Also add any unbonded amount that was rewards
-        if (totalUnbonded > 0 && totalUnbonded > principal) {
-          const unbondedRewards = totalUnbonded - principal;
-          totalRewards += Math.max(0, unbondedRewards);
-        }
-      }
-
-      // Convert from wei to LPT
-      totalRewards = totalRewards / 1e18;
-      
-      // Count reward events (estimate based on rounds)
-      const rewardEventsCount = result.bondEvents?.length || 0;
-
-      // Only return if rewards > 0
-      if (totalRewards <= 0) {
+      // Find orchestrator entry by id
+      const orch = orchestratorYieldData.find(o => o.id && o.id.toLowerCase() === String(delegateId).toLowerCase());
+      const apy = orch?.yield ?? 0;
+      if (!apy || apy <= 0) {
+        // no APY data available
         return null;
       }
 
+      // Use the delegationService.calculateYield helper to compute rewards in LPT
+      const periodStr = periodType === 'weekly' ? '1 week' : '1 day';
+      const calc = await delegationService.calculateYield({
+        amount: bondedAmountLPT,
+        apy,
+        period: periodStr,
+        includeCurrencyConversion: false,
+        currency: 'LPT',
+      });
+
+      if (!calc.success || !calc.data) return null;
+
+      const periodResult = calc.data.periods && calc.data.periods.length ? calc.data.periods[0] : null;
+      const reward = periodResult ? Number(periodResult.rewardAmount) : 0;
       return {
-        totalRewards: totalRewards.toString(),
-        rewardEventsCount
+        delegator: delegator.id,
+        delegate: delegateId,
+        delegateName: orch?.name,
+        apy,
+        bondedAmountLPT,
+        total: reward,
       };
     } catch (error: any) {
-      console.error(`[RewardsNotificationJob] Error fetching earnings for ${walletAddress}:`, error.message);
+      console.error('[RewardsNotificationJob] estimateRewardForDelegator error:', error?.message || error);
       return null;
     }
   }
+
 
   /**
    * Calculate time period based on period type
