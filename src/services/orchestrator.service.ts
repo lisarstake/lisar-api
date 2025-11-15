@@ -95,7 +95,7 @@ export class OrchestratorService {
    * Get yield percentage from the static data for an orchestrator
    * Maps ENS names and abbreviated addresses to their yield values
    */
-  private getOrchestratorYield(ensName: string | null, address: string): number | null {
+  private getOrchestratorYield(ensName: string | null, address: string): { yield: number; description: string | null } | null {
     try {
       // Ensure we have the data as an array
       const yieldData = Array.isArray(orchestratorYieldData) ? orchestratorYieldData : [];
@@ -112,7 +112,7 @@ export class OrchestratorService {
           item.name.toLowerCase() === ensName.toLowerCase()
         );
         if (exactMatch) {
-          return exactMatch.yield;
+          return { yield: exactMatch.yield, description: exactMatch.description || null };
         }
         
         // Remove number prefixes from ENS name (e.g., "1day-dreamer.eth" -> "day-dreamer.eth")
@@ -122,7 +122,7 @@ export class OrchestratorService {
           item.name.toLowerCase() === cleanEnsName.toLowerCase()
         );
         if (cleanedMatch) {
-          return cleanedMatch.yield;
+          return { yield: cleanedMatch.yield, description: cleanedMatch.description || null };
         }
         
         // Try partial matches as fallback
@@ -131,7 +131,7 @@ export class OrchestratorService {
           cleanEnsName.toLowerCase().includes(item.name.toLowerCase())
         );
         if (partialMatch) {
-          return partialMatch.yield;
+          return { yield: partialMatch.yield, description: partialMatch.description || null };
         }
       }
       
@@ -152,7 +152,7 @@ export class OrchestratorService {
       });
       
       if (addressMatch) {
-        return addressMatch.yield;
+        return { yield: addressMatch.yield, description: addressMatch.description || null };
       }
       
       return null; // No match found
@@ -282,8 +282,8 @@ export class OrchestratorService {
       // Transform and enhance data
       let enhancedTranscoders = transcoders.map((transcoder) => {
         const ensName = storedENSNames[transcoder.id];
-        const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
-        const apy = yieldFromData !== null ? yieldFromData : this.calculateAPY(transcoder.rewardCut);
+  const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
+  const apy = yieldFromData !== null ? yieldFromData.yield : this.calculateAPY(transcoder.rewardCut);
         return {
           address: transcoder.id,
           ensName,
@@ -296,7 +296,7 @@ export class OrchestratorService {
           reward: parseFloat(transcoder.rewardCut),
           active: transcoder.active,
           activeSince: transcoder.activationTimestamp,
-          description: 'Livepeer transcoder',
+          description: (yieldFromData && yieldFromData.description) ? yieldFromData.description : 'Livepeer transcoder',
           yieldSource: yieldFromData !== null ? 'static_data' : 'calculated'
         };
       });
@@ -410,14 +410,13 @@ export class OrchestratorService {
        
       // Try to get yield from static data first
       const yieldFromData = this.getOrchestratorYield(ensName, t.id);
-      
       if (yieldFromData !== null) {
         // Return static yield data directly
         return {
-          apyPercent: yieldFromData,
+          apyPercent: yieldFromData.yield,
           roi: {
             delegatorPercent: {
-              rewards: yieldFromData / 100,
+              rewards: yieldFromData.yield / 100,
               fees: 0
             }
           },
@@ -425,8 +424,10 @@ export class OrchestratorService {
             source: 'static_yield_data',
             ensName: ensName || 'none',
             address: t.id,
-            yieldValue: yieldFromData
-          }
+            yieldValue: yieldFromData.yield,
+            description: yieldFromData.description || null
+          },
+          description: yieldFromData.description || null
         };
       }
 
