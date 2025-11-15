@@ -2,6 +2,33 @@ import { GraphQLClient } from 'graphql-request';
 import { orchestratorYieldData } from '../utils/orchestrator';
 import { ethers } from 'ethers';
 
+// Helper class (not exported) to convert timestamps into human-friendly years/months
+class TimestampConverter {
+  yearsSince(activationTimestamp: string | null | undefined): number {
+    if (!activationTimestamp) return 0;
+    const now = Date.now() / 1000;
+    const ts = parseInt(activationTimestamp.toString(), 10) || 0;
+    const years = (now - ts) / (60 * 60 * 24 * 365.25);
+    return Math.max(0, Math.floor(years));
+  }
+
+  monthsSince(activationTimestamp: string | null | undefined): number {
+    if (!activationTimestamp) return 0;
+    const now = Date.now() / 1000;
+    const ts = parseInt(activationTimestamp.toString(), 10) || 0;
+    const months = (now - ts) / (60 * 60 * 24 * 30.4375);
+    return Math.max(0, Math.floor(months));
+  }
+
+  // Returns a compact string like '2yrs' or '6mos'
+  formatApprox(activationTimestamp: string | null | undefined): string {
+    const yrs = this.yearsSince(activationTimestamp);
+    if (yrs >= 1) return `${yrs}yr${yrs !== 1 ? 's' : ''}`;
+    const mos = this.monthsSince(activationTimestamp);
+    return `${mos}mo${mos !== 1 ? 's' : ''}`;
+  }
+}
+
 // Shared provider for ENS lookups (uses RPC_URL or ETH_RPC_URL). If no URL is set, provider is null.
 export const l1Provider: ethers.JsonRpcProvider | null = (process.env.RPC_URL || process.env.ETH_RPC_URL)
   ? new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.ETH_RPC_URL)
@@ -35,6 +62,7 @@ export class OrchestratorService {
   private graphqlEndpoint: string;
   private client: GraphQLClient;
   private ensClient: GraphQLClient;
+  private tsConverter: TimestampConverter;
 
   constructor() {
     this.graphqlEndpoint = process.env.LIVEPEER_SUBGRAPH_URL || '';
@@ -53,6 +81,8 @@ export class OrchestratorService {
         Authorization: `Bearer ${apiKey}`,
       },
     });
+    // helper instance for timestamp conversions
+    this.tsConverter = new TimestampConverter();
   }
 
   // Simple in-memory TTL cache (safe default for single-instance deployments)
@@ -282,8 +312,9 @@ export class OrchestratorService {
       // Transform and enhance data
       let enhancedTranscoders = transcoders.map((transcoder) => {
         const ensName = storedENSNames[transcoder.id];
-  const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
-  const apy = yieldFromData !== null ? yieldFromData.yield : this.calculateAPY(transcoder.rewardCut);
+        const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
+        const apy = yieldFromData !== null ? yieldFromData.yield : this.calculateAPY(transcoder.rewardCut);
+        const feepercent = Number(transcoder.feeShare) / 10000; // Convert feeShare basis points to percentage
         return {
           address: transcoder.id,
           ensName,
@@ -296,7 +327,9 @@ export class OrchestratorService {
           reward: parseFloat(transcoder.rewardCut),
           active: transcoder.active,
           activeSince: transcoder.activationTimestamp,
-          description: (yieldFromData && yieldFromData.description) ? yieldFromData.description : 'Livepeer transcoder',
+          description: (yieldFromData && yieldFromData.description)
+            ? yieldFromData.description
+            : `Livepeer transcoder with ${100 - feepercent}% fee cut and ${Number(transcoder.rewardCut)/10000}% reward cut and active for ${this.tsConverter.formatApprox(transcoder.activationTimestamp)}`,
           yieldSource: yieldFromData !== null ? 'static_data' : 'calculated'
         };
       });
