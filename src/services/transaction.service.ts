@@ -5,7 +5,7 @@ export interface Transaction {
   id: string;
   user_id: string;
   transaction_hash: string;
-  transaction_type: 'deposit' | 'withdrawal' | 'delegation' | 'undelegation';
+  transaction_type: 'deposit' | 'withdrawal' | 'delegation' | 'undelegation' | 'move-stake' | 'reward';
   amount: string;
   token_address?: string;
   token_symbol?: string;

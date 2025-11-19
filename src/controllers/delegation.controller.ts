@@ -3,6 +3,9 @@ import { delegationService } from '../services/delegation.service';
 import { livepeerService } from '../protocols/services/livepeer.service';
 import { transactionService } from '../services/transaction.service';
 import { supabase } from '../config/supabase';
+import { orchestratorService } from '../services/orchestrator.service';
+import { GET_ACTIVE_TRANSCODERS_QUERY } from '../queries/subgraph.queries';
+import stakingUtils from '../utils/staking';
 
 class DelegationController {
   async getDelegations(req: Request, res: Response): Promise<void> {
@@ -42,7 +45,7 @@ class DelegationController {
       );
 
       if (result.success) {
-         console.log('Delegation successful, txHash:', result.txHash);
+        console.log('Delegation successful, txHash:', result.txHash);
         // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
         (async () => {
           try {
@@ -77,7 +80,7 @@ class DelegationController {
               status: 'confirmed',
               source: 'delegation_api'
             });
-               console.log('Transaction record creation result:', txCreateResult);
+            console.log('Transaction record creation result:', txCreateResult);
             if (!txCreateResult.success) {
               console.error('Failed to create delegation transaction record:', txCreateResult.error);
             }
@@ -92,6 +95,76 @@ class DelegationController {
       }
     } catch (error: any) {
       console.error('Error in delegation controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Move stake from one orchestrator to another (redelegate)
+   */
+  async moveStake(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, oldDelegate, newDelegate, amount } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || !oldDelegate || !newDelegate || !amount) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({ success: false, error: 'Authorization token is required' });
+      }
+
+      const result = await livepeerService.moveStake(
+        walletId,
+        walletAddress,
+        oldDelegate,
+        newDelegate,
+        amount,
+        authorizationToken
+      );
+
+      if (result.success) {
+        // best-effort create a transaction record
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'move-stake',
+              created_at: new Date().toISOString(),
+              amount: amount.toString(),
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'confirmed',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create moveStake transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating moveStake transaction record:', err);
+          }
+        })();
+
+        return res.status(200).json({ success: true, txHash: result.txHash });
+      }
+
+      return res.status(500).json({ success: false, error: result.error });
+    } catch (error: any) {
+      console.error('Error in moveStake controller:', error);
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
@@ -156,11 +229,11 @@ class DelegationController {
       const authorizationToken = req.headers.authorization?.split(' ')[1];
 
       if (!walletId || !walletAddress || !amount) {
-        return res.status(400).json({ success: false,error: 'Missing required fields' });
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
       }
 
       if (!authorizationToken) {
-        return res.status(401).json({success: false, error: 'Authorization token is required' });
+        return res.status(401).json({ success: false, error: 'Authorization token is required' });
       }
 
       const result = await livepeerService.undelegate(
@@ -207,9 +280,9 @@ class DelegationController {
           }
         })();
 
-        return res.status(200).json({ success:true ,txHash: result.txHash });
+        return res.status(200).json({ success: true, txHash: result.txHash });
       } else {
-        return res.status(500).json({ success: false,error: result.error });
+        return res.status(500).json({ success: false, error: result.error });
       }
     } catch (error: any) {
       console.error('Error in undelegate controller:', error);
@@ -301,6 +374,107 @@ class DelegationController {
   }
 
   /**
+   * Rebonds an unbonding lock back to the delegator's current delegate using an optional hint.
+   * If hints are omitted, the server will attempt to compute them from the subgraph active transcoders.
+   */
+  async rebond(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, unbondingLockId, newPosPrev, newPosNext } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || unbondingLockId === undefined) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({ success: false, error: 'Authorization token is required' });
+      }
+
+      let prev = newPosPrev;
+      let next = newPosNext;
+
+      // Compute hints server-side if not provided
+      if (!prev || !next) {
+        try {
+          const delegator = await delegationService.fetchDelegations(walletAddress);
+          const lock = (delegator?.unbondingLocks || []).find((l: any) => String(l.id) === String(unbondingLockId) || String(l.unbondingLockId) === String(unbondingLockId));
+          const delegateAddress = lock?.delegate?.id;
+
+          if (delegateAddress) {
+            const resp = await orchestratorService.fetchFromSubgraph(GET_ACTIVE_TRANSCODERS_QUERY, { page: 1, limit: 100 } as any);
+            const transcoders = (resp?.data || []).map((t: any) => ({ id: (t.address || t.id), totalStake: String(t.totalStake || '0') }));
+            const hint = stakingUtils.getHint(delegateAddress, transcoders);
+            prev = prev || hint.newPosPrev;
+            next = next || hint.newPosNext;
+          } else {
+            // default to empty address if we cannot determine
+            prev = prev || '0x0000000000000000000000000000000000000000';
+            next = next || '0x0000000000000000000000000000000000000000';
+          }
+        } catch (err) {
+          console.warn('Failed to compute hints automatically:', err);
+          prev = prev || '0x0000000000000000000000000000000000000000';
+          next = next || '0x0000000000000000000000000000000000000000';
+        }
+      }
+
+      const result = await livepeerService.rebondWithHint(
+        walletId,
+        walletAddress,
+        parseInt(unbondingLockId, 10),
+        prev,
+        next,
+        authorizationToken
+      );
+
+      if (result.success) {
+        // Best-effort create rebond transaction record
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'delegation',
+              transaction_timestamp: new Date().toISOString(),
+              amount: '0',
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'confirmed',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create rebond transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating rebond transaction record:', err);
+          }
+        })();
+
+        return res.status(200).json({ success: true, txHash: result.txHash });
+      }
+
+      return res.status(500).json({ success: false, error: result.error });
+    } catch (error: any) {
+      console.error('Error in rebond controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
    * Handle withdrawing earned fees from Livepeer
    */
   async withdrawFees(req: Request, res: Response): Promise<Response> {
@@ -351,7 +525,7 @@ class DelegationController {
               user_id: userId,
               transaction_hash: result.txHash || '',
               transaction_type: 'withdrawal',
-               created_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
               amount: amount.toString(),
               token_symbol: 'LPT',
               wallet_address: walletAddress,
@@ -379,6 +553,8 @@ class DelegationController {
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
+
+  // duplicate/simpler rebond handler removed in favor of the enhanced rebond implementation above
 
   /**
    * Get delegator onchain transactions (pending and completed)
@@ -487,7 +663,7 @@ class DelegationController {
 
       // Validate amount and apy are positive numbers
       const numericAmount = parseFloat(amount);
-      
+
       // Handle APY as percentage string (e.g., "62%") or number (e.g., 62)
       let numericApy: number;
       if (typeof apy === 'string' && apy.endsWith('%')) {
@@ -551,6 +727,79 @@ class DelegationController {
       }
     } catch (error: any) {
       console.error('Error in calculateYield controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Rebond an unbonding lock back to a delegate (rebondFromUnbondedWithHint)
+   */
+  async rebondFromUnbonded(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, to, unbondingLockId, newPosPrev, newPosNext } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || !to || unbondingLockId === undefined) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({ success: false, error: 'Authorization token is required' });
+      }
+
+      const result = await livepeerService.rebondFromUnbondedWithHint(
+        walletId,
+        walletAddress,
+        to,
+        parseInt(unbondingLockId, 10),
+        newPosPrev,
+        newPosNext,
+        authorizationToken
+      );
+
+      if (result.success) {
+        // Best-effort create rebond transaction record
+        (async () => {
+          try {
+            let userId = walletId;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) console.error('Error fetching user for transaction creation:', userError);
+              if (user && (user as any).user_id) userId = (user as any).user_id;
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'delegation',
+              transaction_timestamp: new Date().toISOString(),
+              amount: '0',
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'confirmed',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create rebond transaction record:', txCreateResult.error);
+          } catch (err) {
+            console.error('Error creating rebond transaction record:', err);
+          }
+        })();
+
+        return res.status(200).json({ success: true, txHash: result.txHash });
+      } else {
+        return res.status(500).json({ success: false, error: result.error });
+      }
+    } catch (error: any) {
+      console.error('Error in rebondFromUnbonded controller:', error);
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }

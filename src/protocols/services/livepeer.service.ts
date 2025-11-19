@@ -4,6 +4,9 @@ import bondingManagerAbi from '../abis/livepeer/bondingManager.abi.json';
 import LPT_TOKEN_ABI from '../abis/livepeer/lptToken.abi.json';
 import { ethers } from 'ethers';
 import { type Hex} from 'viem';
+import { orchestratorService } from '../../services/orchestrator.service';
+import { GET_ACTIVE_TRANSCODERS_QUERY } from '../../queries/subgraph.queries';
+import stakingUtils from '../../utils/staking';
 export class LivepeerService {
   /**
    * Delegate tokens to a Livepeer orchestrator using a Privy wallet
@@ -170,6 +173,156 @@ export class LivepeerService {
       return { success: false, error: error.message || 'Unknown error occurred' };
     }
   }
+
+  /**
+   * Move stake from one delegate to another using bondWithHint.
+   * This computes list hints from the subgraph active transcoders and calls bondWithHint on-chain.
+   * bondWithHint(_amount, _to, _oldDelegateNewPosPrev, _oldDelegateNewPosNext, _currDelegateNewPosPrev, _currDelegateNewPosNext)
+   */
+  async moveStake(
+    walletId: string,
+    walletAddress: Hex,
+    oldDelegate: Hex,
+    newDelegate: Hex,
+    amount: string,
+    authorizationToken: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      if (!authorizationToken) {
+        throw new Error('Authorization context or private key is missing');
+      }
+
+      const userJwt = authorizationToken;
+      console.log(userJwt)
+
+      // Fetch active transcoders from subgraph (ordered by totalStake desc)
+      const resp = await orchestratorService.fetchFromSubgraph(GET_ACTIVE_TRANSCODERS_QUERY, { page: 1, limit: 100, sortBy: 'totalStake', sortOrder: 'desc' } as any);
+      const transcoders = (resp?.data || []).map((t: any) => ({ id: (t.address || t.id), totalStake: (t.totalStake || t.totalStake)?.toString?.() || String(t.totalStake || '0') }));
+
+      // compute hints for old and new delegates
+      const oldHint = stakingUtils.getHint(String(oldDelegate), transcoders);
+      const newHint = stakingUtils.getHint(String(newDelegate), transcoders);
+
+      const amountWei = ethers.parseEther(amount);
+
+      // Step 1: Approve the bonding manager proxy to spend LPT on behalf of the wallet
+ 
+        const approveTxHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
+          walletId,
+          walletAddress,
+          LIVEPEER_CONTRACTS.arbitrum.token as Hex,
+          LPT_TOKEN_ABI,
+          'approve',
+          [LIVEPEER_CONTRACTS.arbitrum.proxy as Hex, amountWei],
+          userJwt
+        );
+        console.log('Approve transaction hash (moveStake):', approveTxHash);
+  
+
+      // Step 2: Call bondWithHint to move stake (delegation) with list hints
+      const txHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
+        walletId,
+        walletAddress,
+        LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
+        bondingManagerAbi,
+        'bondWithHint',
+        [amountWei, newDelegate, oldHint.newPosPrev, oldHint.newPosNext, newHint.newPosPrev, newHint.newPosNext],
+        userJwt
+      );
+
+      return { success: true, txHash:txHash };
+    } catch (error: any) {
+      console.error('Error moving stake (transferBond):', error);
+      return { success: false, error: error.message || 'Unknown error occurred' };
+    }
+  }
+
+  /**
+   * Rebond an unbonding lock back to a delegate (rebondFromUnbondedWithHint)
+   * - to: target delegate address
+   * - unbondingLockId: id of the unbonding lock
+   * - newPosPrev/newPosNext: optional list hint addresses for insertion
+   */
+  async rebondFromUnbondedWithHint(
+    walletId: string,
+    walletAddress: Hex,
+    to: Hex,
+    unbondingLockId: number,
+    newPosPrev?: Hex,
+    newPosNext?: Hex,
+    authorizationToken?: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      if (!authorizationToken) {
+        throw new Error('Authorization context or private key is missing');
+      }
+
+      const userJwt = authorizationToken;
+
+      // Fetch active transcoders to compute hints if not provided
+      const resp = await orchestratorService.fetchFromSubgraph(GET_ACTIVE_TRANSCODERS_QUERY, { page: 1, limit: 100, sortBy: 'totalStake', sortOrder: 'desc' } as any);
+      const transcoders = (resp?.data || []).map((t: any) => ({ id: (t.address || t.id), totalStake: (t.totalStake || t.totalStake)?.toString?.() || String(t.totalStake || '0') }));
+
+      const hint = (newPosPrev && newPosNext) ? { newPosPrev, newPosNext } : stakingUtils.getHint(String(to), transcoders);
+
+      const txHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
+        walletId,
+        walletAddress,
+        LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
+        bondingManagerAbi,
+        'rebondFromUnbondedWithHint',
+        [to, unbondingLockId, hint.newPosPrev, hint.newPosNext],
+        userJwt
+      );
+
+      return { success: true, txHash };
+    } catch (error: any) {
+      console.error('Error rebonding (rebondFromUnbondedWithHint):', error);
+      return { success: false, error: error.message || 'Unknown error occurred' };
+    }
+  }
+
+  /**
+   * Rebonds an unbonding lock to the delegator's current delegate with an optional list hint.
+   * Calls bondingManager.rebondWithHint(unbondingLockId, newPosPrev, newPosNext)
+   */
+  async rebondWithHint(
+    walletId: string,
+    walletAddress: Hex,
+    unbondingLockId: number,
+    newPosPrev: Hex,
+    newPosNext: Hex,
+    authorizationToken: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      if (!authorizationToken) {
+        throw new Error('Authorization context or private key is missing');
+      }
+
+      const userJwt = authorizationToken;
+
+      const txHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
+        walletId,
+        walletAddress,
+        LIVEPEER_CONTRACTS.arbitrum.proxy as Hex,
+        bondingManagerAbi,
+        'rebondWithHint',
+        [unbondingLockId, newPosPrev, newPosNext],
+        userJwt
+      );
+
+      return { success: true, txHash };
+    } catch (error: any) {
+      console.error('Error rebondWithHint:', error);
+      return { success: false, error: error.message || 'Unknown error occurred' };
+    }
+  }
+
+  /**
+   * Rebonds an unbonding lock using an optional list hint for insertion position.
+   * Calls bondingManager.rebondWithHint(_unbondingLockId, _newPosPrev, _newPosNext)
+   */
+  // duplicate removed; single implementation exists above
 }
 
 export const livepeerService = new LivepeerService();

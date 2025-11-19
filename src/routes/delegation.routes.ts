@@ -371,6 +371,196 @@ router.post('/stake', (req, res) => delegationController.delegate(req, res));
 
 /**
  * @swagger
+ * /delegation/rebond-from-unbonded:
+ *   post:
+ *     summary: Rebond an unbonding lock to a delegate with optional list hints
+ *     tags: [Delegation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - walletId
+ *               - walletAddress
+ *               - to
+ *               - unbondingLockId
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *                 description: Privy wallet ID
+ *                 example: wallet_123
+ *               walletAddress:
+ *                 type: string
+ *                 description: Wallet address
+ *                 example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *               to:
+ *                 type: string
+ *                 description: Target delegate address to rebond to
+ *                 example: 0x123d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *               unbondingLockId:
+ *                 type: integer
+ *                 description: ID of the unbonding lock to rebond
+ *                 example: 1
+ *               newPosPrev:
+ *                 type: string
+ *                 description: Optional hint - previous transcoder address in pool
+ *               newPosNext:
+ *                 type: string
+ *                 description: Optional hint - next transcoder address in pool
+ *     responses:
+ *       200:
+ *         description: Successfully rebonded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 txHash:
+ *                   type: string
+ *                   example: 0xabc123def456...
+ *       400:
+ *         description: Bad request - missing required fields
+ *       401:
+ *         description: Unauthorized - missing authorization token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/rebond-from-unbonded', verifyAuth, (req, res) => delegationController.rebondFromUnbonded(req, res));
+
+/**
+ * @swagger
+ * /delegation/rebond:
+ *   post:
+ *     summary: Rebonds an unbonding lock to the delegator's current delegate using optional list hints
+ *     tags: [Delegation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - walletId
+ *               - walletAddress
+ *               - unbondingLockId
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *                 description: Privy wallet ID
+ *               walletAddress:
+ *                 type: string
+ *                 description: Wallet address of the delegator
+ *               unbondingLockId:
+ *                 type: integer
+ *                 description: ID of the unbonding lock to rebond
+ *               newPosPrev:
+ *                 type: string
+ *                 description: Optional list hint previous address
+ *               newPosNext:
+ *                 type: string
+ *                 description: Optional list hint next address
+ *     responses:
+ *       200:
+ *         description: Successfully submitted rebond transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 txHash:
+ *                   type: string
+ *       400:
+ *         description: Bad request - missing required fields
+ *       401:
+ *         description: Unauthorized - missing authorization token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/rebond', verifyAuth, (req, res) => delegationController.rebond(req, res));
+
+/**
+ * Rebonds an unbonding lock with optional hints
+ */
+router.post('/rebond', verifyAuth, (req, res) => delegationController.rebond(req, res));
+
+/**
+ * @swagger
+ * /delegation/move-stake:
+ *   post:
+ *     summary: Move (redelegate) stake from one orchestrator to another using bondWithHint
+ *     tags: [Delegation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - walletId
+ *               - walletAddress
+ *               - oldDelegate
+ *               - newDelegate
+ *               - amount
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *                 description: Privy wallet ID
+ *                 example: wallet_123
+ *               walletAddress:
+ *                 type: string
+ *                 description: Wallet address (delegator)
+ *                 example: 0x742d35Cc6634C0532925a3b8C6Cd1d31F03e46F6
+ *               oldDelegate:
+ *                 type: string
+ *                 description: Current delegate address (from)
+ *                 example: 0xabc123...'
+ *               newDelegate:
+ *                 type: string
+ *                 description: Target delegate address (to)
+ *                 example: 0xdef456...'
+ *               amount:
+ *                 type: string
+ *                 description: Amount of LPT to move (in ETH units)
+ *                 example: "10.0"
+ 
+ *     responses:
+ *       200:
+ *         description: Successfully submitted move-stake transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 txHash:
+ *                   type: string
+ *                   example: 0xabc123def456...
+ *       400:
+ *         description: Bad request - missing required fields
+ *       401:
+ *         description: Unauthorized - missing authorization token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/move-stake', verifyAuth, (req, res) => delegationController.moveStake(req, res));
+
+/**
+ * @swagger
  * /delegation/all/{delegator}:
  *   get:
  *     summary: Get all delegations for a delegator
