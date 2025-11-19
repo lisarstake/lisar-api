@@ -14,6 +14,7 @@ import {
 } from '../controllers/auth.controller';
 import dashboardRoutes from './dashboard.routes';
 import validatorRoutes from './validator.routes';
+import gasRoutes from './gas.routes';
 
 const router = Router();
 
@@ -420,6 +421,9 @@ router.use('/dashboard', dashboardRoutes);
 
 // Mount validator routes
 router.use('/validators', validatorRoutes);
+
+// Mount gas top-up admin route
+router.use('/gas-topup', gasRoutes);
 
 // Mount transaction management routes  
 router.use('/transactions', transactionRoutes);
