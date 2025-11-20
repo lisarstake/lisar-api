@@ -1,3 +1,4 @@
+
 import { GraphQLClient } from 'graphql-request';
 import { GET_DELEGATOR_BY_ADDRESS_QUERY, GET_ALL_DELEGATIONS_QUERY, GET_BOND_EVENTS_QUERY, GET_PENDING_REWARDS_QUERY, GET_PROFILE_INFO, GET_EVENTS } from '../queries/subgraph.queries';
 import { protocolService } from './protocol.service';
@@ -5,10 +6,12 @@ import { ethers } from 'ethers';
 import { arbitrumOne, LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
 import bondingManagerAbi from '../protocols/abis/livepeer/bondingManager.abi.json';
 import coinGeckoService from '../integrations/coingecko.service';
-
+import { livepeerService } from '../protocols/services/livepeer.service';
+import { Hex } from 'viem';
 export class DelegationService {
   private graphqlEndpoint: string;
   private client: GraphQLClient;
+
 
   constructor() {
     this.graphqlEndpoint = process.env.LIVEPEER_SUBGRAPH_URL || '';
@@ -35,7 +38,7 @@ export class DelegationService {
   }
 
   // Get all delegations for a delegator
-  async getAllDelegations(delegatorAddress: string): Promise<{success: boolean, data?: any, error?: string}> {
+  async getAllDelegations(delegatorAddress: string): Promise<{ success: boolean, data?: any, error?: string }> {
     const query = GET_ALL_DELEGATIONS_QUERY;
 
     try {
@@ -61,7 +64,7 @@ export class DelegationService {
   }
 
   // Get actual delegations from a delegator to orchestrators using bond events
-  async getDelegationsToOrchestrators(delegatorAddress: string): Promise<{success: boolean, delegations?: Array<{delegate: string, amount: string}>, error?: string}> {
+  async getDelegationsToOrchestrators(delegatorAddress: string): Promise<{ success: boolean, delegations?: Array<{ delegate: string, amount: string }>, error?: string }> {
     const query = GET_BOND_EVENTS_QUERY;
 
     try {
@@ -104,7 +107,7 @@ export class DelegationService {
   }
 
   // Get pending rewards for a delegator from a specific transcoder
-  async getPendingFees(delegatorAddress: string, transcoderAddress: string): Promise<{success: boolean, rewards?: string, error?: string}> {
+  async getPendingFees(delegatorAddress: string, transcoderAddress: string): Promise<{ success: boolean, rewards?: string, error?: string }> {
     const query = GET_PENDING_REWARDS_QUERY;
 
     try {
@@ -112,11 +115,11 @@ export class DelegationService {
         delegator: delegatorAddress.toLowerCase(),
         transcoder: transcoderAddress.toLowerCase(),
       });
-      console.log(response,"response")
+      console.log(response, "response")
       if (!response.delegator) {
         return { success: false, error: "Delegator not found" };
       }
-    
+
       return {
         success: true,
         rewards: response.delegator.fees || "0",
@@ -129,12 +132,12 @@ export class DelegationService {
 
   // Get delegator onchain transactions (pending and completed stake transactions)
   async getDelegatorTransactions(delegatorAddress: string): Promise<{
-    success: boolean, 
+    success: boolean,
     data?: {
       pendingStakeTransactions: Array<any>,
       completedStakeTransactions: Array<any>,
       currentRound: string
-    }, 
+    },
     error?: string
   }> {
     const query = GET_PROFILE_INFO;
@@ -161,8 +164,8 @@ export class DelegationService {
 
       // Filter and enhance pending stake transactions (withdrawRound > currentRound)
       const pendingStakeTransactions = unbondingLocks
-        .filter((item: any) => 
-          item.withdrawRound && 
+        .filter((item: any) =>
+          item.withdrawRound &&
           parseInt(item.withdrawRound, 10) > parseInt(currentRoundId, 10)
         )
         .map((item: any) => {
@@ -237,11 +240,11 @@ export class DelegationService {
       const response = await this.client.request<{ transactions: any[] }>(query, {
         id: delegatorAddress.toLowerCase(),
       });
-      
+
       if (!response.transactions || response.transactions.length === 0) {
         return { success: false, error: "No transactions found for this delegator" };
       }
-      
+
       const rewards: Array<{
         round: string,
         rewardTokens: string,
@@ -253,7 +256,7 @@ export class DelegationService {
       // Extract reward events from transactions
       response.transactions.forEach((transaction: any) => {
         if (transaction.events) {
-           console.log(transaction.events,"transaction.events")
+          console.log(transaction.events, "transaction.events")
           transaction.events.forEach((event: any) => {
             if (event.__typename === 'RewardEvent') {
               rewards.push({
@@ -305,16 +308,16 @@ export class DelegationService {
       // Create provider and contract instance
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       const contract = new ethers.Contract(LIVEPEER_CONTRACTS.arbitrum.proxy, bondingManagerAbi, provider);
-      
+
       // Get profile data from subgraph
       const profileQuery = GET_DELEGATOR_BY_ADDRESS_QUERY;
-      const profileResponse = await this.client.request<{ delegator: any }>(profileQuery, { 
-        address: delegatorAddress.toLowerCase() 
+      const profileResponse = await this.client.request<{ delegator: any }>(profileQuery, {
+        address: delegatorAddress.toLowerCase()
       });
 
       // Call pendingStake with endRound = 0 (current round)
       const pendingStakeResult = await contract.pendingStake(delegatorAddress, 0);
-      
+
       // Convert from wei to ETH units
       const pendingStakeFormatted = ethers.formatEther(pendingStakeResult);
 
@@ -350,57 +353,57 @@ export class DelegationService {
     // Input/display currency for amount and results. Supported: 'USD','NGN','GBP','LPT'
     currency?: 'USD' | 'NGN' | 'GBP' | 'LPT';
   }): Promise<{
-     success: boolean;
-     data?: {
-       initialAmount: number;
-       apy: number;
-       marketValue?: {
-         currency: string;
-         lptPrice?: number;
-         exchangeRate?: number;
-       };
-       periods: Array<{
-         period: string;
-         finalAmount: number;
-         rewardAmount: number;
-         compoundingPeriods: number;
-         periodicRate: number;
-         marketValue?: {
-           finalMarketValue: number;
-           rewardMarketValue: number;
-         };
-       }>;
-     };
-     error?: string;
-   }> {
-     try {
+    success: boolean;
+    data?: {
+      initialAmount: number;
+      apy: number;
+      marketValue?: {
+        currency: string;
+        lptPrice?: number;
+        exchangeRate?: number;
+      };
+      periods: Array<{
+        period: string;
+        finalAmount: number;
+        rewardAmount: number;
+        compoundingPeriods: number;
+        periodicRate: number;
+        marketValue?: {
+          finalMarketValue: number;
+          rewardMarketValue: number;
+        };
+      }>;
+    };
+    error?: string;
+  }> {
+    try {
       const { amount, apy: apyInput, period, includeCurrencyConversion = false, currency = 'USD' } = params;
 
-       // Parse APY - handle both string ("62%") and number formats
-       let apy: number;
-       if (typeof apyInput === 'string') {
-         // Remove '%' and parse as number
-         apy = parseFloat(apyInput.replace('%', ''));
-       } else {
-         apy = apyInput;
-       }
+      // Parse APY - handle both string ("62%") and number formats
+      let apy: number;
+      if (typeof apyInput === 'string') {
+        // Remove '%' and parse as number
+        apy = parseFloat(apyInput.replace('%', ''));
+      } else {
+        apy = apyInput;
+      }
 
-       // Validate inputs
-       if (amount <= 0) {
-         return { success: false, error: "Amount must be greater than 0" };
-       }
-       if (apy <= 0) {
-         return { success: false, error: "APY must be greater than 0" };
-       }
+      // Validate inputs
+      if (amount <= 0) {
+        return { success: false, error: "Amount must be greater than 0" };
+      }
+      if (apy <= 0) {
+        return { success: false, error: "APY must be greater than 0" };
+      }
 
-       // Define all periods if none specified
-       const allPeriods = ['1 day', '1 week', '1 month', '6 months', '1 year'] as const;
-       const periodsToCalculate = period ? [period] : allPeriods;
+      // Define all periods if none specified
+      const allPeriods = ['1 day', '1 week', '1 month', '6 months', '1 year'] as const;
+      const periodsToCalculate = period ? [period] : allPeriods;
 
-       // Get market value info once if currency conversion is needed
+      // Get market value info once if currency conversion is needed
       let marketValueInfo: { currency: string; lptPrice?: number; exchangeRate?: number } | undefined;
       const inputCurrency = (currency || 'USD').toUpperCase();
-      
+
       // Always get LPT price when currency is specified or conversion is requested
       if (inputCurrency !== 'LPT') {
         try {
@@ -414,16 +417,16 @@ export class DelegationService {
         }
       }
 
-       // Calculate yields for all specified periods
-         const periods = periodsToCalculate.map(periodItem => {
-         // Calculate compounding periods based on Livepeer's round duration (21 hours 40 minutes)
-         const periodInDays = this.getPeriodInDays(periodItem);
-         const compoundingPeriodDays = (21 + 40 / 60) / 24; // Convert to days
-         const compoundingPeriods = periodInDays / compoundingPeriodDays;
+      // Calculate yields for all specified periods
+      const periods = periodsToCalculate.map(periodItem => {
+        // Calculate compounding periods based on Livepeer's round duration (21 hours 40 minutes)
+        const periodInDays = this.getPeriodInDays(periodItem);
+        const compoundingPeriodDays = (21 + 40 / 60) / 24; // Convert to days
+        const compoundingPeriods = periodInDays / compoundingPeriodDays;
 
-         // Calculate periodic rate
-         const annualRate = apy / 100;
-         const periodicRate = Math.pow(1 + annualRate, compoundingPeriodDays / 365) - 1;
+        // Calculate periodic rate
+        const annualRate = apy / 100;
+        const periodicRate = Math.pow(1 + annualRate, compoundingPeriodDays / 365) - 1;
 
         // Determine principal in LPT units
         let principalLPT: number;
@@ -437,11 +440,11 @@ export class DelegationService {
         // Compute amounts in LPT then convert back to input/display currency
         const finalAmountLPT = principalLPT * Math.pow(1 + periodicRate, compoundingPeriods);
         const rewardAmountLPT = finalAmountLPT - principalLPT;
-        
+
         // Convert to display currency
         let finalAmount: number;
         let rewardAmount: number;
-        
+
         if (inputCurrency === 'LPT') {
           finalAmount = finalAmountLPT;
           rewardAmount = rewardAmountLPT;
@@ -451,16 +454,16 @@ export class DelegationService {
           rewardAmount = rewardAmountLPT * displayPrice;
         }
 
-         const periodResult: any = {
-           period: periodItem,
-           finalAmount,
-           rewardAmount,
-           compoundingPeriods,
-           periodicRate
-         };
+        const periodResult: any = {
+          period: periodItem,
+          finalAmount,
+          rewardAmount,
+          compoundingPeriods,
+          periodicRate
+        };
 
-         // Add market value details for fiat currencies
-         if (marketValueInfo) {
+        // Add market value details for fiat currencies
+        if (marketValueInfo) {
           periodResult.marketValue = {
             lptPrice: marketValueInfo.lptPrice,
             exchangeRate: marketValueInfo.exchangeRate,
@@ -468,25 +471,25 @@ export class DelegationService {
             finalAmountInLPT: finalAmountLPT,
             rewardAmountInLPT: rewardAmountLPT
           };
-         }
+        }
 
-         return periodResult;
-       });
+        return periodResult;
+      });
 
-       return {
-         success: true,
-         data: {
+      return {
+        success: true,
+        data: {
           initialAmount: amount,
           apy,
           marketValue: marketValueInfo,
           periods
-         }
-       };
-     } catch (error) {
-       console.error("Error calculating yield:", error);
-       return { success: false, error: "Failed to calculate yield" };
-     }
-   }
+        }
+      };
+    } catch (error) {
+      console.error("Error calculating yield:", error);
+      return { success: false, error: "Failed to calculate yield" };
+    }
+  }
 
   // Helper method to convert period string to days
   private getPeriodInDays(period: string): number {
@@ -502,8 +505,8 @@ export class DelegationService {
 
   // Helper method to fetch current LPT price and calculate market values
   private async calculateMarketValue(
-    initialAmount: number, 
-    finalAmount: number, 
+    initialAmount: number,
+    finalAmount: number,
     currency: 'USD' | 'EUR' | 'GBP'
   ): Promise<{
     currency: string;
@@ -549,8 +552,8 @@ export class DelegationService {
 
         const response = await fetch(`https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`);
         if (response.ok) {
-          const data = await response.json() as { 
-            result: string; 
+          const data = await response.json() as {
+            result: string;
             conversion_rates: { [key: string]: number };
             'error-type'?: string;
           };
@@ -584,6 +587,79 @@ export class DelegationService {
       finalMarketValue,
       rewardMarketValue
     };
+  }
+
+
+  // Main rebond function: chooses which rebond method to use based on delegator status
+  async rebond({
+    delegatorAddress,
+    unbondingLockId,
+    newPosPrev,
+    newPosNext,
+    to,
+    wallet,
+    walletId,
+    walletAddress,
+    authorizationToken
+  }: {
+    delegatorAddress: string;
+    unbondingLockId: number;
+    newPosPrev: Hex;
+    newPosNext: Hex;
+    to?: Hex ; // Only needed for unbonded
+    wallet?: ethers.Wallet;
+    // Privy credentials (preferred)
+    walletId?: string;
+    walletAddress?: Hex;
+    authorizationToken?: string;
+  }): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      const rpcUrl = arbitrumOne.rpcUrls.default.http[0];
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const contract = new ethers.Contract(LIVEPEER_CONTRACTS.arbitrum.proxy, bondingManagerAbi, provider);
+      // Get delegator status from contract
+      const delegator = await contract.delegatorStatus(delegatorAddress);
+      const delegatorStatus = Number(delegator);
+      console.log(delegatorStatus, "delegatorStatus")
+      // Bonded = 0, Pending = 1, Unbonded = 2 (see BondingManager contract)
+      const isBonded = delegatorStatus === 1
+
+      const hasPrivy = !!walletId && !!walletAddress && !!authorizationToken;
+      if (!hasPrivy) {
+        return { success: false, error: 'Privy credentials required: walletId, walletAddress and Authorization token' };
+      }
+        console.log(isBonded, "isBonded")
+      if (isBonded) {
+
+       return await livepeerService.rebondWithHint(
+          walletId as string,
+          walletAddress as Hex,
+          unbondingLockId,
+          newPosPrev,
+          newPosNext,
+          authorizationToken as string
+        );
+
+      } else {
+        // If the delegator is unbonded, we must provide a target delegate address `to`.
+        if (!to) return { success: false, error: 'Delegate address (to) required for rebond from unbonded' };
+
+        // rebondFromUnbondedWithHint expects (walletId, walletAddress, to, unbondingLockId, newPosPrev?, newPosNext?, authorizationToken?)
+      return await livepeerService.rebondFromUnbondedWithHint(
+          walletId as string,
+          walletAddress as Hex,
+          to as Hex,
+          unbondingLockId,
+          newPosPrev,
+          newPosNext,
+          authorizationToken as string
+        );
+
+      }
+    } catch (error) {
+      console.error('Error in rebond:', error);
+      return { success: false, error: (error as Error).message };
+    }
   }
 }
 
