@@ -1,3 +1,6 @@
+import totpRoutes from './totp.routes';
+// Mount TOTP (2FA) routes
+
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import userRoutes from './user.routes';
@@ -42,5 +45,7 @@ router.use('/notifications', notificationRoutes);
 
 // Mount admin routes
 router.use('/admin', adminRoutes);
+
+router.use('/totp', totpRoutes);
 
 export default router;
