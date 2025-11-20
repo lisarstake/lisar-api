@@ -1,7 +1,9 @@
 import { notificationService } from '../services/notification.service';
 import { userService } from '../services/user.service';
 import { GraphQLClient } from 'graphql-request';
-import { GET_DELEGATOR_REWARD_EVENTS_QUERY } from '../queries/subgraph.queries';
+import { GET_DELEGATOR_BY_ADDRESS_QUERY } from '../queries/subgraph.queries';
+import { delegationService } from '../services/delegation.service';
+import orchestratorYieldData from '../utils/orchestrator';
 
 export class RewardsNotificationJob {
   private graphqlClient: GraphQLClient;
@@ -76,12 +78,24 @@ export class RewardsNotificationJob {
       return;
     }
 
-    // Get user's earnings for the time period
-    const earnings = await this.getUserEarningsForPeriod(
-      walletAddress,
-      timePeriod.start,
-      timePeriod.end
-    );
+    // For daily and weekly, use APY-based estimator (no fallback to timestamp/event logic)
+    let earnings: any = null;
+    if (periodType === 'daily' || periodType === 'weekly') {
+      const estimate = await this.estimateRewardForDelegator(walletAddress, periodType);
+      if (estimate && estimate.total > 0) {
+        earnings = {
+          totalRewards: String(estimate.total),
+          rewardEventsCount: 0,
+        };
+      } else {
+        // No rewards for this user in this period
+        return;
+      }
+    } else {
+      // For other periods, no APY-based estimator or historical calculation is available
+      // Set earnings to null
+      earnings = null;
+    }
 
     if (!earnings || parseFloat(earnings.totalRewards) === 0) {
       console.log(`[RewardsNotificationJob] No rewards for user ${user.email}, ${walletAddress} in the last ${periodType} period`);
@@ -113,88 +127,87 @@ export class RewardsNotificationJob {
   }
 
   /**
-   * Get user earnings for a specific time period using actual RewardEvents from subgraph
-   * This is the most accurate method as it uses historical reward data directly
+   * Estimate daily reward for a delegator using the delegationService.calculateYield helper
+   * Steps:
+   *  - Fetch delegator via subgraph
+   *  - Get current delegate (orchestrator) id and bondedAmount
+   *  - Match orchestrator id to `orchestratorYieldData` to obtain APY
+   *  - Call delegationService.calculateYield with currency 'LPT' and period '1 day'
    */
-  private async getUserEarningsForPeriod(
+  /**
+   * Estimate reward for a delegator using the delegationService.calculateYield helper
+   * Supports 'daily' and 'weekly' periods.
+   */
+  private async estimateRewardForDelegator(
     walletAddress: string,
-    startDate: Date,
-    endDate: Date
-  ): Promise<{ totalRewards: string; rewardEventsCount: number } | null> {
+    periodType: 'daily' | 'weekly'
+  ): Promise<{
+    delegator?: string;
+    delegate?: string;
+    delegateName?: string;
+    apy?: number;
+    bondedAmountLPT?: number;
+    total: number;
+    breakdown?: Array<{
+      delegate: string;
+      delegateName?: string;
+      apy: number;
+      bondedAmountLPT: number;
+      rewardLPT: number;
+    }>;
+  } | null> {
     try {
-      const startTimestamp = Math.floor(startDate.getTime() / 1000);
-      const endTimestamp = Math.floor(endDate.getTime() / 1000);
+      const resp: any = await this.graphqlClient.request(GET_DELEGATOR_BY_ADDRESS_QUERY, {
+        address: walletAddress.toLowerCase(),
+      });
 
-      console.log(`[RewardsNotificationJob] Fetching rewards for ${walletAddress} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      const delegator = resp?.delegator;
+      if (!delegator) return null;
 
-      // Query RewardEvents directly from the subgraph
-      const result: any = await this.graphqlClient.request(
-        GET_DELEGATOR_REWARD_EVENTS_QUERY,
-        {
-          delegatorId: walletAddress.toLowerCase(),
-          startTimestamp,
-          endTimestamp
-        }
-      );
-
-      if (!result.rewardEvents || result.rewardEvents.length === 0) {
-        console.log(`[RewardsNotificationJob] No reward events found for ${walletAddress} in the period`);
+      const delegateId = delegator.delegate?.id;
+      const bondedAmountWei = delegator.bondedAmount || '0';
+      const bondedAmountLPT = Number(bondedAmountWei) 
+  
+      if (!delegateId || bondedAmountLPT <= 0) {
         return null;
       }
 
-      console.log(`[RewardsNotificationJob] Found ${result.rewardEvents.length} reward events for ${walletAddress}`);
-
-      // Sum up all rewardTokens from the events
-      let totalRewardsWei = 0;
-      const roundRewards: Map<string, number> = new Map();
-
-      for (const event of result.rewardEvents) {
-        const rewardTokens = parseFloat(event.rewardTokens || '0');
-        totalRewardsWei += rewardTokens;
-
-        // Track rewards per round for detailed logging
-        const roundId = event.round?.id || 'unknown';
-        const currentRoundReward = roundRewards.get(roundId) || 0;
-        roundRewards.set(roundId, currentRoundReward + rewardTokens);
-      }
-
-      // Convert from wei to LPT (divide by 1e18)
-      const totalRewards = totalRewardsWei / 1e18;
-
-      // Log detailed breakdown
-      console.log(`[RewardsNotificationJob] Rewards breakdown for ${walletAddress}:`);
-      console.log(`  - Total reward events: ${result.rewardEvents.length}`);
-      console.log(`  - Total rewards (wei): ${totalRewardsWei}`);
-      console.log(`  - Total rewards (LPT): ${totalRewards.toFixed(6)}`);
-      console.log(`  - Rounds with rewards: ${roundRewards.size}`);
-      
-      // Log top 5 rounds by rewards
-      const topRounds = Array.from(roundRewards.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-      
-      if (topRounds.length > 0) {
-        console.log(`  - Top rounds:`);
-        topRounds.forEach(([roundId, reward], index) => {
-          console.log(`    ${index + 1}. Round ${roundId}: ${(reward / 1e18).toFixed(6)} LPT`);
-        });
-      }
-
-      // Only return if rewards > 0
-      if (totalRewards <= 0) {
-        console.log(`[RewardsNotificationJob] Total rewards is zero or negative for ${walletAddress}`);
+      // Find orchestrator entry by id
+      const orch = orchestratorYieldData.find(o => o.id && o.id.toLowerCase() === String(delegateId).toLowerCase());
+      const apy = orch?.yield ?? 0;
+      if (!apy || apy <= 0) {
+        // no APY data available
         return null;
       }
 
+      // Use the delegationService.calculateYield helper to compute rewards in LPT
+      const periodStr = periodType === 'weekly' ? '1 week' : '1 day';
+      const calc = await delegationService.calculateYield({
+        amount: bondedAmountLPT,
+        apy,
+        period: periodStr,
+        includeCurrencyConversion: false,
+        currency: 'LPT',
+      });
+
+      if (!calc.success || !calc.data) return null;
+
+      const periodResult = calc.data.periods && calc.data.periods.length ? calc.data.periods[0] : null;
+      const reward = periodResult ? Number(periodResult.rewardAmount) : 0;
       return {
-        totalRewards: totalRewards.toFixed(6),
-        rewardEventsCount: result.rewardEvents.length
+        delegator: delegator.id,
+        delegate: delegateId,
+        delegateName: orch?.name,
+        apy,
+        bondedAmountLPT,
+        total: reward,
       };
     } catch (error: any) {
-      console.error(`[RewardsNotificationJob] Error fetching earnings for ${walletAddress}:`, error.message);
+      console.error('[RewardsNotificationJob] estimateRewardForDelegator error:', error?.message || error);
       return null;
     }
   }
+
 
   /**
    * Calculate time period based on period type

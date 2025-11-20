@@ -200,13 +200,14 @@ export class WebhookService {
 
   private async handleWalletFundsDeposited(event: PrivyWebhookEvent, svixId: string): Promise<void> {
 
-    // For the actual webhook event structure, extract from the event object directly
-    const eventData = event as any;
-    const depositAmount = eventData.amount;
-    const assetAddress = eventData.asset?.address;
-    const recipientAddress = eventData.recipient;
-    const walletId = eventData.wallet_id;
-    const transactionHash = eventData.transaction_hash;
+  // For the actual webhook event structure, extract from the event object directly
+  const eventData = event as any;
+  const depositAmount = eventData.amount;
+  const assetAddress = eventData.asset?.address;
+  const recipientAddress = eventData.recipient;
+  const walletId = eventData.wallet_id;
+  const transactionHash = eventData.transaction_hash;
+  const { sendMail } = await import('./email.service');
     
     console.log('Funds deposited to webhook:', { 
       svixId,
@@ -253,7 +254,7 @@ export class WebhookService {
         // Find user by wallet_id instead of wallet_address
         const { data: user, error: userError } = await supabase
           .from('users')
-          .select('user_id, lpt_balance')
+          .select('user_id, lpt_balance, email')
           .eq('wallet_id', walletId)
           .maybeSingle();
 
@@ -312,8 +313,15 @@ export class WebhookService {
           console.log('Transaction record created successfully for user:', user.user_id);
         }
 
-        // TODO: Send notification to user about successful deposit
-        
+        // Send notification to user about successful deposit
+        if (user.email) {
+          await sendMail({
+            to: user.email,
+            subject: 'LPT Deposit Received',
+            text: `You have received a deposit of ${amountInEther} LPT.\n\nTransaction Hash: ${transactionHash}`,
+            html: `<p>You have received a deposit of <b>${amountInEther} LPT</b>.</p><p>Transaction Hash: <code>${transactionHash}</code></p>`
+          });
+        }
       } catch (error) {
         console.error('Error processing LPT deposit:', error);
       }

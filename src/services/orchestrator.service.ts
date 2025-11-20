@@ -2,6 +2,33 @@ import { GraphQLClient } from 'graphql-request';
 import { orchestratorYieldData } from '../utils/orchestrator';
 import { ethers } from 'ethers';
 
+// Helper class (not exported) to convert timestamps into human-friendly years/months
+class TimestampConverter {
+  yearsSince(activationTimestamp: string | null | undefined): number {
+    if (!activationTimestamp) return 0;
+    const now = Date.now() / 1000;
+    const ts = parseInt(activationTimestamp.toString(), 10) || 0;
+    const years = (now - ts) / (60 * 60 * 24 * 365.25);
+    return Math.max(0, Math.floor(years));
+  }
+
+  monthsSince(activationTimestamp: string | null | undefined): number {
+    if (!activationTimestamp) return 0;
+    const now = Date.now() / 1000;
+    const ts = parseInt(activationTimestamp.toString(), 10) || 0;
+    const months = (now - ts) / (60 * 60 * 24 * 30.4375);
+    return Math.max(0, Math.floor(months));
+  }
+
+  // Returns a compact string like '2yrs' or '6mos'
+  formatApprox(activationTimestamp: string | null | undefined): string {
+    const yrs = this.yearsSince(activationTimestamp);
+    if (yrs >= 1) return `${yrs}yr${yrs !== 1 ? 's' : ''}`;
+    const mos = this.monthsSince(activationTimestamp);
+    return `${mos}mo${mos !== 1 ? 's' : ''}`;
+  }
+}
+
 // Shared provider for ENS lookups (uses RPC_URL or ETH_RPC_URL). If no URL is set, provider is null.
 export const l1Provider: ethers.JsonRpcProvider | null = (process.env.RPC_URL || process.env.ETH_RPC_URL)
   ? new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.ETH_RPC_URL)
@@ -35,6 +62,7 @@ export class OrchestratorService {
   private graphqlEndpoint: string;
   private client: GraphQLClient;
   private ensClient: GraphQLClient;
+  private tsConverter: TimestampConverter;
 
   constructor() {
     this.graphqlEndpoint = process.env.LIVEPEER_SUBGRAPH_URL || '';
@@ -53,6 +81,8 @@ export class OrchestratorService {
         Authorization: `Bearer ${apiKey}`,
       },
     });
+    // helper instance for timestamp conversions
+    this.tsConverter = new TimestampConverter();
   }
 
   // Simple in-memory TTL cache (safe default for single-instance deployments)
@@ -95,7 +125,7 @@ export class OrchestratorService {
    * Get yield percentage from the static data for an orchestrator
    * Maps ENS names and abbreviated addresses to their yield values
    */
-  private getOrchestratorYield(ensName: string | null, address: string): number | null {
+  private getOrchestratorYield(ensName: string | null, address: string): { yield: number; description: string | null } | null {
     try {
       // Ensure we have the data as an array
       const yieldData = Array.isArray(orchestratorYieldData) ? orchestratorYieldData : [];
@@ -112,7 +142,7 @@ export class OrchestratorService {
           item.name.toLowerCase() === ensName.toLowerCase()
         );
         if (exactMatch) {
-          return exactMatch.yield;
+          return { yield: exactMatch.yield, description: exactMatch.description || null };
         }
         
         // Remove number prefixes from ENS name (e.g., "1day-dreamer.eth" -> "day-dreamer.eth")
@@ -122,7 +152,7 @@ export class OrchestratorService {
           item.name.toLowerCase() === cleanEnsName.toLowerCase()
         );
         if (cleanedMatch) {
-          return cleanedMatch.yield;
+          return { yield: cleanedMatch.yield, description: cleanedMatch.description || null };
         }
         
         // Try partial matches as fallback
@@ -131,7 +161,7 @@ export class OrchestratorService {
           cleanEnsName.toLowerCase().includes(item.name.toLowerCase())
         );
         if (partialMatch) {
-          return partialMatch.yield;
+          return { yield: partialMatch.yield, description: partialMatch.description || null };
         }
       }
       
@@ -152,7 +182,7 @@ export class OrchestratorService {
       });
       
       if (addressMatch) {
-        return addressMatch.yield;
+        return { yield: addressMatch.yield, description: addressMatch.description || null };
       }
       
       return null; // No match found
@@ -283,7 +313,8 @@ export class OrchestratorService {
       let enhancedTranscoders = transcoders.map((transcoder) => {
         const ensName = storedENSNames[transcoder.id];
         const yieldFromData = this.getOrchestratorYield(ensName, transcoder.id);
-        const apy = yieldFromData !== null ? yieldFromData : this.calculateAPY(transcoder.rewardCut);
+        const apy = yieldFromData !== null ? yieldFromData.yield : this.calculateAPY(transcoder.rewardCut);
+        const feepercent = Number(transcoder.feeShare) / 10000; // Convert feeShare basis points to percentage
         return {
           address: transcoder.id,
           ensName,
@@ -296,7 +327,9 @@ export class OrchestratorService {
           reward: parseFloat(transcoder.rewardCut),
           active: transcoder.active,
           activeSince: transcoder.activationTimestamp,
-          description: 'Livepeer transcoder',
+          description: (yieldFromData && yieldFromData.description)
+            ? yieldFromData.description
+            : `Livepeer transcoder with ${100 - feepercent}% fee cut and ${Number(transcoder.rewardCut)/10000}% reward cut and active for ${this.tsConverter.formatApprox(transcoder.activationTimestamp)}`,
           yieldSource: yieldFromData !== null ? 'static_data' : 'calculated'
         };
       });
@@ -410,14 +443,13 @@ export class OrchestratorService {
        
       // Try to get yield from static data first
       const yieldFromData = this.getOrchestratorYield(ensName, t.id);
-      
       if (yieldFromData !== null) {
         // Return static yield data directly
         return {
-          apyPercent: yieldFromData,
+          apyPercent: yieldFromData.yield,
           roi: {
             delegatorPercent: {
-              rewards: yieldFromData / 100,
+              rewards: yieldFromData.yield / 100,
               fees: 0
             }
           },
@@ -425,8 +457,10 @@ export class OrchestratorService {
             source: 'static_yield_data',
             ensName: ensName || 'none',
             address: t.id,
-            yieldValue: yieldFromData
-          }
+            yieldValue: yieldFromData.yield,
+            description: yieldFromData.description || null
+          },
+          description: yieldFromData.description || null
         };
       }
 
@@ -445,6 +479,16 @@ export class OrchestratorService {
       console.error('calculateApyFor error:', err);
       throw err;
     }
+  }
+    /**
+   * Public method to get all active transcoders (for controller hint calculation)
+   */
+  async getActiveTranscoders(): Promise<{ data: Array<{ id: string; totalStake: string }> }> {
+    // Use the GET_ALL_TRANSCODERS_QUERY from subgraph.queries
+    const { GET_ALL_TRANSCODERS_QUERY } = await import('../queries/subgraph.queries');
+    const response = await this.client.request<{ transcoders: Array<{ id: string; totalStake: string }> }>(GET_ALL_TRANSCODERS_QUERY);
+    // Only return id and totalStake for hint calculation
+    return { data: (response.transcoders || []).map((t: any) => ({ id: t.id, totalStake: t.totalStake })) };
   }
 }
 
