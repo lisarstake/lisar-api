@@ -480,6 +480,16 @@ export class OrchestratorService {
       throw err;
     }
   }
+    /**
+   * Public method to get all active transcoders (for controller hint calculation)
+   */
+  async getActiveTranscoders(): Promise<{ data: Array<{ id: string; totalStake: string }> }> {
+    // Use the GET_ALL_TRANSCODERS_QUERY from subgraph.queries
+    const { GET_ALL_TRANSCODERS_QUERY } = await import('../queries/subgraph.queries');
+    const response = await this.client.request<{ transcoders: Array<{ id: string; totalStake: string }> }>(GET_ALL_TRANSCODERS_QUERY);
+    // Only return id and totalStake for hint calculation
+    return { data: (response.transcoders || []).map((t: any) => ({ id: t.id, totalStake: t.totalStake })) };
+  }
 }
 
 export const orchestratorService = new OrchestratorService();

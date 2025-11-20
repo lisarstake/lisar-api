@@ -6,8 +6,11 @@ import { supabase } from '../config/supabase';
 import { orchestratorService } from '../services/orchestrator.service';
 import { GET_ACTIVE_TRANSCODERS_QUERY } from '../queries/subgraph.queries';
 import stakingUtils from '../utils/staking';
+import { sendMail } from '../services/email.service';
 
 class DelegationController {
+
+
   async getDelegations(req: Request, res: Response): Promise<void> {
     const { delegator } = req.params;
 
@@ -46,14 +49,15 @@ class DelegationController {
 
       if (result.success) {
         console.log('Delegation successful, txHash:', result.txHash);
-        // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
+        // Create a transaction record (best-effort). Try to resolve user_id and email from users table by wallet_id
         (async () => {
           try {
             let userId = walletId;
+            let userEmail = null;
             if (supabase) {
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('user_id')
+                .select('user_id, email')
                 .eq('wallet_id', walletId)
                 .maybeSingle();
 
@@ -63,6 +67,7 @@ class DelegationController {
 
               if (user && (user as any).user_id) {
                 userId = (user as any).user_id;
+                userEmail = (user as any).email;
               }
             } else {
               console.warn('Supabase client not initialized; using walletId as user_id fallback');
@@ -72,7 +77,7 @@ class DelegationController {
               user_id: userId,
               transaction_hash: result.txHash || '',
               transaction_type: 'delegation',
-              transaction_timestamp: new Date().toISOString(),
+              created_at: new Date().toISOString(),
               amount: amount.toString(),
               token_symbol: 'LPT',
               wallet_address: walletAddress,
@@ -84,8 +89,18 @@ class DelegationController {
             if (!txCreateResult.success) {
               console.error('Failed to create delegation transaction record:', txCreateResult.error);
             }
+
+            // Send email notification for successful stake
+            if (userEmail) {
+              await sendMail({
+                to: userEmail,
+                subject: 'LPT Staked Successfully',
+                text: `You have successfully staked ${amount} LPT.\n\nTransaction Hash: ${result.txHash}`,
+                html: `<p>You have successfully staked <b>${amount} LPT</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+              });
+            }
           } catch (err) {
-            console.error('Error creating delegation transaction record:', err);
+            console.error('Error creating delegation transaction record or sending email:', err);
           }
         })();
 
@@ -125,19 +140,23 @@ class DelegationController {
       );
 
       if (result.success) {
-        // best-effort create a transaction record
+        // best-effort create a transaction record and send email
         (async () => {
           try {
             let userId = walletId;
+            let userEmail = null;
             if (supabase) {
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('user_id')
+                .select('user_id, email')
                 .eq('wallet_id', walletId)
                 .maybeSingle();
 
               if (userError) console.error('Error fetching user for transaction creation:', userError);
-              if (user && (user as any).user_id) userId = (user as any).user_id;
+              if (user && (user as any).user_id) {
+                userId = (user as any).user_id;
+                userEmail = (user as any).email;
+              }
             }
 
             const txCreateResult = await transactionService.createTransaction({
@@ -154,8 +173,19 @@ class DelegationController {
             });
 
             if (!txCreateResult.success) console.error('Failed to create moveStake transaction record:', txCreateResult.error);
+
+            // Send email notification for successful move stake
+            if (userEmail) {
+
+              await sendMail({
+                to: userEmail,
+                subject: 'LPT Stake Moved',
+                text: `You have successfully moved ${amount} LPT stake to a new orchestrator.\n\nTransaction Hash: ${result.txHash}`,
+                html: `<p>You have successfully moved <b>${amount} LPT</b> stake to a new orchestrator.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+              });
+            }
           } catch (err) {
-            console.error('Error creating moveStake transaction record:', err);
+            console.error('Error creating moveStake transaction record or sending email:', err);
           }
         })();
 
@@ -244,19 +274,23 @@ class DelegationController {
       );
 
       if (result.success) {
-        // Best-effort create undelegation transaction record
+        // Best-effort create undelegation transaction record and send email
         (async () => {
           try {
             let userId = walletId;
+            let userEmail = null;
             if (supabase) {
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('user_id')
+                .select('user_id, email')
                 .eq('wallet_id', walletId)
                 .maybeSingle();
 
               if (userError) console.error('Error fetching user for transaction creation:', userError);
-              if (user && (user as any).user_id) userId = (user as any).user_id;
+              if (user && (user as any).user_id) {
+                userId = (user as any).user_id;
+                userEmail = (user as any).email;
+              }
             } else {
               console.warn('Supabase client not initialized; using walletId as user_id fallback');
             }
@@ -275,8 +309,18 @@ class DelegationController {
             });
 
             if (!txCreateResult.success) console.error('Failed to create undelegation transaction record:', txCreateResult.error);
+
+            // Send email notification for successful unstake
+            if (userEmail) {
+              await sendMail({
+                to: userEmail,
+                subject: 'LPT Unstaked Successfully',
+                text: `You have successfully unstaked ${amount} LPT.\n\nTransaction Hash: ${result.txHash}`,
+                html: `<p>You have successfully unstaked <b>${amount} LPT</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+              });
+            }
           } catch (err) {
-            console.error('Error creating undelegation transaction record:', err);
+            console.error('Error creating undelegation transaction record or sending email:', err);
           }
         })();
 
@@ -320,19 +364,23 @@ class DelegationController {
       );
 
       if (result.success) {
-        // Best-effort create withdrawal transaction record (amount unknown from request)
+        // Best-effort create withdrawal transaction record (amount unknown from request) and send email
         (async () => {
           try {
             let userId = walletId;
+            let userEmail = null;
             if (supabase) {
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('user_id')
+                .select('user_id, email')
                 .eq('wallet_id', walletId)
                 .maybeSingle();
 
               if (userError) console.error('Error fetching user for transaction creation:', userError);
-              if (user && (user as any).user_id) userId = (user as any).user_id;
+              if (user && (user as any).user_id) {
+                userId = (user as any).user_id;
+                userEmail = (user as any).email;
+              }
             } else {
               console.warn('Supabase client not initialized; using walletId as user_id fallback');
             }
@@ -351,14 +399,23 @@ class DelegationController {
             });
 
             if (!txCreateResult.success) console.error('Failed to create withdrawStake transaction record:', txCreateResult.error);
+
+            // Send email notification for successful withdrawal
+            if (userEmail) {
+              await sendMail({
+                to: userEmail,
+                subject: 'LPT Stake Withdrawn',
+                text: `You have successfully withdrawn your LPT stake.\n\nTransaction Hash: ${result.txHash}`,
+                html: `<p>You have successfully withdrawn your <b>LPT stake</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+              });
+            }
           } catch (err) {
-            console.error('Error creating withdrawStake transaction record:', err);
+            console.error('Error creating withdrawStake transaction record or sending email:', err);
           }
         })();
 
         return res.status(200).json({
           success: true,
-          message: 'Successfully withdrew unbonded stake from Livepeer',
           txHash: result.txHash
         });
       } else {
@@ -369,107 +426,6 @@ class DelegationController {
       }
     } catch (error: any) {
       console.error('Error in withdrawStake controller:', error);
-      return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-  }
-
-  /**
-   * Rebonds an unbonding lock back to the delegator's current delegate using an optional hint.
-   * If hints are omitted, the server will attempt to compute them from the subgraph active transcoders.
-   */
-  async rebond(req: Request, res: Response): Promise<Response> {
-    try {
-      const { walletId, walletAddress, unbondingLockId, newPosPrev, newPosNext } = req.body;
-      const authorizationToken = req.headers.authorization?.split(' ')[1];
-
-      if (!walletId || !walletAddress || unbondingLockId === undefined) {
-        return res.status(400).json({ success: false, error: 'Missing required fields' });
-      }
-
-      if (!authorizationToken) {
-        return res.status(401).json({ success: false, error: 'Authorization token is required' });
-      }
-
-      let prev = newPosPrev;
-      let next = newPosNext;
-
-      // Compute hints server-side if not provided
-      if (!prev || !next) {
-        try {
-          const delegator = await delegationService.fetchDelegations(walletAddress);
-          const lock = (delegator?.unbondingLocks || []).find((l: any) => String(l.id) === String(unbondingLockId) || String(l.unbondingLockId) === String(unbondingLockId));
-          const delegateAddress = lock?.delegate?.id;
-
-          if (delegateAddress) {
-            const resp = await orchestratorService.fetchFromSubgraph(GET_ACTIVE_TRANSCODERS_QUERY, { page: 1, limit: 100 } as any);
-            const transcoders = (resp?.data || []).map((t: any) => ({ id: (t.address || t.id), totalStake: String(t.totalStake || '0') }));
-            const hint = stakingUtils.getHint(delegateAddress, transcoders);
-            prev = prev || hint.newPosPrev;
-            next = next || hint.newPosNext;
-          } else {
-            // default to empty address if we cannot determine
-            prev = prev || '0x0000000000000000000000000000000000000000';
-            next = next || '0x0000000000000000000000000000000000000000';
-          }
-        } catch (err) {
-          console.warn('Failed to compute hints automatically:', err);
-          prev = prev || '0x0000000000000000000000000000000000000000';
-          next = next || '0x0000000000000000000000000000000000000000';
-        }
-      }
-
-      const result = await livepeerService.rebondWithHint(
-        walletId,
-        walletAddress,
-        parseInt(unbondingLockId, 10),
-        prev,
-        next,
-        authorizationToken
-      );
-
-      if (result.success) {
-        // Best-effort create rebond transaction record
-        (async () => {
-          try {
-            let userId = walletId;
-            if (supabase) {
-              const { data: user, error: userError } = await supabase
-                .from('users')
-                .select('user_id')
-                .eq('wallet_id', walletId)
-                .maybeSingle();
-
-              if (userError) console.error('Error fetching user for transaction creation:', userError);
-              if (user && (user as any).user_id) userId = (user as any).user_id;
-            } else {
-              console.warn('Supabase client not initialized; using walletId as user_id fallback');
-            }
-
-            const txCreateResult = await transactionService.createTransaction({
-              user_id: userId,
-              transaction_hash: result.txHash || '',
-              transaction_type: 'delegation',
-              transaction_timestamp: new Date().toISOString(),
-              amount: '0',
-              token_symbol: 'LPT',
-              wallet_address: walletAddress,
-              wallet_id: walletId,
-              status: 'confirmed',
-              source: 'delegation_api'
-            });
-
-            if (!txCreateResult.success) console.error('Failed to create rebond transaction record:', txCreateResult.error);
-          } catch (err) {
-            console.error('Error creating rebond transaction record:', err);
-          }
-        })();
-
-        return res.status(200).json({ success: true, txHash: result.txHash });
-      }
-
-      return res.status(500).json({ success: false, error: result.error });
-    } catch (error: any) {
-      console.error('Error in rebond controller:', error);
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
@@ -779,7 +735,7 @@ class DelegationController {
               user_id: userId,
               transaction_hash: result.txHash || '',
               transaction_type: 'delegation',
-              transaction_timestamp: new Date().toISOString(),
+              created_at: new Date().toISOString(),
               amount: '0',
               token_symbol: 'LPT',
               wallet_address: walletAddress,
@@ -800,6 +756,111 @@ class DelegationController {
       }
     } catch (error: any) {
       console.error('Error in rebondFromUnbonded controller:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+  /**
+ * Rebond an unbonding lock to a delegate (auto-selects correct contract call)
+ */
+  async rebond(req: Request, res: Response) {
+    try {
+      let { delegatorAddress, unbondingLockId, newPosPrev, newPosNext, to, walletId } = req.body;
+      const authorizationToken = req.headers.authorization?.split(' ')[1] || req.body.authorizationToken;
+      // Use delegatorAddress as the walletAddress (Privy wallet address is same as delegator)
+      const walletAddress = delegatorAddress;
+      if (!delegatorAddress || unbondingLockId === undefined) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+      // Privy-only flow: require walletId and Authorization token
+      const hasPrivy = !!walletId && !!authorizationToken;
+      if (!hasPrivy) {
+        return res.status(400).json({ success: false, error: 'Provide walletId and Authorization header' });
+      }
+
+      // If newPosPrev or newPosNext are missing or '0', compute using stakingUtils.getHint
+      if (!newPosPrev || !newPosNext || newPosPrev === '0' || newPosNext === '0') {
+        // Fetch active transcoders
+        const { data } = await orchestratorService.getActiveTranscoders();
+        // Map to Transcoder[] for getHint
+        const transcoders = (data || []).map((o: any) => ({ id: o.id, totalStake: o.totalStake }));
+        // Use 'to' if provided, else fallback to delegator's current delegate
+        const targetId = to || (await delegationService.fetchDelegations(delegatorAddress))?.delegate?.id;
+        const hint = stakingUtils.getHint(targetId, transcoders);
+        newPosPrev = hint.newPosPrev;
+        newPosNext = hint.newPosNext;
+      }
+
+      // Privy (gas-sponsored) flow only
+      const result = await delegationService.rebond({
+        delegatorAddress,
+        unbondingLockId: Number(unbondingLockId),
+        newPosPrev,
+        newPosNext,
+        to,
+        walletId,
+        walletAddress: walletAddress,
+        authorizationToken
+      } as any);
+      if (result.success) {
+        // Best-effort create rebond transaction record and send email
+        (async () => {
+          try {
+            let userId = walletId;
+            let userEmail = null;
+            if (supabase) {
+              const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('user_id, email')
+                .eq('wallet_id', walletId)
+                .maybeSingle();
+
+              if (userError) {
+                console.error('Error fetching user for rebond transaction creation:', userError);
+              }
+
+              if (user && (user as any).user_id) {
+                userId = (user as any).user_id;
+                userEmail = (user as any).email;
+              }
+            } else {
+              console.warn('Supabase client not initialized; using walletId as user_id fallback');
+            }
+
+            const txCreateResult = await transactionService.createTransaction({
+              user_id: userId,
+              transaction_hash: result.txHash || '',
+              transaction_type: 'rebond',
+              created_at: new Date().toISOString(),
+              amount: '0',
+              token_symbol: 'LPT',
+              wallet_address: walletAddress,
+              wallet_id: walletId,
+              status: 'confirmed',
+              source: 'delegation_api'
+            });
+
+            if (!txCreateResult.success) console.error('Failed to create rebond transaction record:', txCreateResult.error);
+
+            // Send email notification for successful rebond
+            if (userEmail) {
+              await sendMail({
+                to: userEmail,
+                subject: 'LPT Rebonded Successfully',
+                text: `You have successfully rebonded your LPT (unbonding lock ${unbondingLockId}).\n\nTransaction Hash: ${result.txHash}`,
+                html: `<p>You have successfully rebonded your LPT (unbonding lock <b>${unbondingLockId}</b>).</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+              });
+            }
+          } catch (err) {
+            console.error('Error creating rebond transaction record or sending email:', err);
+          }
+        })();
+
+        return res.status(200).json({ success: true, txHash: result.txHash });
+      } else {
+        return res.status(500).json({ success: false, error: result.error });
+      }
+    } catch (error: any) {
+      console.error('Error in rebond controller:', error);
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
