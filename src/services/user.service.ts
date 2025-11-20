@@ -1,3 +1,36 @@
+import crypto from 'crypto';
+// Util: AES-256-GCM encryption/decryption for TOTP secrets
+const TOTP_ENCRYPTION_KEY = process.env.TOTP_ENCRYPTION_KEY || '';
+const IV_LENGTH = 12; // 96 bits for GCM
+
+function encryptTOTPSecret(secret: string): string {
+  if (!TOTP_ENCRYPTION_KEY || TOTP_ENCRYPTION_KEY.length < 32) {
+    throw new Error('TOTP_ENCRYPTION_KEY env var must be set to 32+ chars');
+  }
+
+  const iv = crypto.randomBytes(IV_LENGTH);
+
+  const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(TOTP_ENCRYPTION_KEY, 'utf8'), iv);
+
+  const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv.toString('base64'), tag.toString('base64'), encrypted.toString('base64')].join(':');
+}
+
+function decryptTOTPSecret(data: string): string {
+  if (!TOTP_ENCRYPTION_KEY || TOTP_ENCRYPTION_KEY.length < 32) {
+    throw new Error('TOTP_ENCRYPTION_KEY env var must be set to 32+ chars');
+  }
+  const [ivB64, tagB64, encB64] = data.split(':');
+  if (!ivB64 || !tagB64 || !encB64) throw new Error('Invalid encrypted TOTP secret format');
+  const iv = Buffer.from(ivB64, 'base64');
+  const tag = Buffer.from(tagB64, 'base64');
+  const encrypted = Buffer.from(encB64, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(TOTP_ENCRYPTION_KEY, 'utf8'), iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString('utf8');
+}
 import { authService } from './auth.service';
 import { privyService } from '../integrations/privy/privy.service';
 import { Request, Response, NextFunction } from 'express';
@@ -6,6 +39,47 @@ import { supabase } from '../config/supabase';
 import { UserWithWallet } from '../types/user.types';
 
 export class UserService {
+  /**
+   * Store (encrypted) TOTP secret for a user
+   * You should encrypt the secret before storing in production
+   */
+  async setTOTPSecret(userId: string, secret: string): Promise<void> {
+    if (!supabase) throw new Error('Supabase client is not initialized.');
+    console.log("userId, secret",userId, secret);
+    const encrypted = encryptTOTPSecret(secret);
+    const { error } = await supabase
+      .from('users')
+      .update({ totp_secret: encrypted, is_totp_enabled: false })
+      .eq('user_id', userId);
+    if (error) throw new Error(`Failed to set TOTP secret: ${error.message}`);
+  }
+
+  /**
+   * Retrieve TOTP secret for a user (should decrypt in production)
+   */
+  async getTOTPSecret(userId: string): Promise<string | null> {
+    if (!supabase) throw new Error('Supabase client is not initialized.');
+    const { data, error } = await supabase
+      .from('users')
+      .select('totp_secret')
+      .eq('user_id', userId)
+      .single();
+    if (error) throw new Error(`Failed to get TOTP secret: ${error.message}`);
+    if (!data?.totp_secret) return null;
+    return decryptTOTPSecret(data.totp_secret);
+  }
+
+  /**
+   * Mark TOTP as enabled for a user (after successful verification)
+   */
+  async enableTOTP(userId: string): Promise<void> {
+    if (!supabase) throw new Error('Supabase client is not initialized.');
+    const { error } = await supabase
+      .from('users')
+      .update({ is_totp_enabled: true })
+      .eq('user_id', userId);
+    if (error) throw new Error(`Failed to enable TOTP: ${error.message}`);
+  }
   /**
    * Create a complete user setup: Supabase auth + Privy user + Wallet
    */

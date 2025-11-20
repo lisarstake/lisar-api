@@ -111,6 +111,7 @@ export class PrivyService {
       if (!privyClient) {
         throw new Error('Privy client not initialized');
       }
+      console.log(userJwt)
 
       const authorizationContext = {
         user_jwts: [userJwt],
@@ -140,6 +141,7 @@ export class PrivyService {
     userJwt: string
   ): Promise<string> {
     try {
+      console.log(userJwt)
       if (!privyClient) {
         throw new Error('Privy client not initialized');
       }
