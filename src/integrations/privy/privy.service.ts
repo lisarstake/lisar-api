@@ -197,20 +197,20 @@ export class PrivyService {
           const formatted = formatContractError(err);
           console.error('Privy tx error (userMessage):', formatted.userMessage);
           console.error('Privy tx error (debug):', formatted.debug.full);
-          throw new Error(formatted.userMessage);
+          throw new Error(formatted.debug.details || formatted.userMessage);
         }
       }
 
       const formatted = formatContractError(lastErr);
       console.error('Privy tx error (userMessage):', formatted.userMessage);
       console.error('Privy tx error (debug):', formatted.debug.full);
-      throw new Error(formatted.userMessage);
+      throw new Error(formatted.debug.details || formatted.userMessage);
 
     } catch (error: any) {
       const formatted = formatContractError(error);
       console.error('Privy tx error (userMessage):', formatted.userMessage);
       console.error('Privy tx error (debug):', formatted.debug.full);
-      throw new Error(formatted.userMessage);
+      throw new Error(formatted.debug.details || formatted.userMessage);
     }
   }
 

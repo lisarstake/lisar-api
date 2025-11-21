@@ -40,3 +40,33 @@ export interface PrivyWebhookEvent {
   };
   createdAt: string;
 }
+
+export interface OnramperWebhookEvent {
+  orderId: number;
+  eventType: 'onramp' | 'offramp';
+  walletAddress: string;
+  coinId: number;
+  fiatType: number;
+  expectedPrice: number;
+  actualFiatAmount: number;
+  paymentType: number;
+  expectedCryptoAmount: number;
+  actualPrice: number;
+  actualCryptoAmount: number;
+  kycNeeded: number;
+  createdAt: string;
+  updatedAt: string;
+  status: number;
+  referenceId: string;
+  chainId: number;
+  onRampFee: number;
+  gasFee: number;
+  clientFee: number;
+  gatewayFee: number;
+  transactionHash: string;
+  merchantRecognitionId?: string;
+  webhookTrials: number;
+  coinCode: string;
+  network: string;
+}
+
