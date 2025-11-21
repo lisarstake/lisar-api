@@ -2,6 +2,7 @@ import { Router } from 'express';
 import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
 import jobRoutes from './job.routes';
+import onramperRoutes from './onramper.routes';
 import { adminAuth } from '../middleware/admin.middleware';
 import { 
   adminLogin, 
@@ -25,6 +26,8 @@ const router = Router();
  *     description: Admin endpoints for user management
  *   - name: Admin - Transactions
  *     description: Admin endpoints for transaction management
+ *   - name: Admin - Onramper
+ *     description: Admin endpoints for Onramper settings management
  */
 
 /**
@@ -431,4 +434,8 @@ router.use('/transactions', transactionRoutes);
 // Mount job management routes
 router.use('/jobs', jobRoutes);
 
+// Mount onramper management routes
+router.use('/onramper', onramperRoutes);
+
 export default router;
+

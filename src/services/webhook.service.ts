@@ -1,10 +1,32 @@
-import { PrivyWebhookEvent } from '../types/webhook.types';
+
+import { PrivyWebhookEvent, OnramperWebhookEvent } from '../types/webhook.types';
 import { delegationService } from '../services/delegation.service';
 import { livepeerService } from '../protocols/services/livepeer.service';
 import { supabase } from '../config/supabase';
 import { LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
 import { ethers } from 'ethers';
 import { transactionService } from './transaction.service';
+import { sendMail } from './email.service';
+
+// Onramper status code mapping
+const ONRAMPER_STATUS_CODES: Record<number, string> = {
+  [-4]: 'amount mismatch',
+  [-3]: 'bank and kyc name mismatch',
+  [-2]: 'transaction abandoned',
+  [-1]: 'transaction timed out',
+  [0]: 'transaction created',
+  [1]: 'referenceId claimed',
+  [2]: 'deposit secured',
+  [3]: 'crypto purchased',
+  [4]: 'withdrawal complete',
+  [5]: 'webhook sent',
+  [11]: 'order placement initiated',
+  [12]: 'purchasing crypto',
+  [13]: 'crypto purchased',
+  [14]: 'withdrawal initiated',
+  [15]: 'withdrawal complete',
+  [16]: 'webhook sent',
+};
 
 export class WebhookService {
   async handlePrivyWebhook(event: PrivyWebhookEvent, svixId: string): Promise<void> {
@@ -63,7 +85,7 @@ export class WebhookService {
           await this.handleWalletFundsDeposited(event, svixId);
           break;
         case 'wallet.funds_withdrawn':
-          await this.handleWalletFundsWithdrawn(event);
+          await this.handleWalletFundsWithdrawn(event,svixId);
           break;
         
         default:
@@ -207,16 +229,9 @@ export class WebhookService {
   const recipientAddress = eventData.recipient;
   const walletId = eventData.wallet_id;
   const transactionHash = eventData.transaction_hash;
-  const { sendMail } = await import('./email.service');
+
     
-    console.log('Funds deposited to webhook:', { 
-      svixId,
-      walletId,
-      recipientAddress,
-      depositAmount,
-      assetAddress,
-      transactionHash
-    });
+   console.log('')
 
     // Check for duplicate webhook processing using svixId
     if (!supabase) {
@@ -330,17 +345,270 @@ export class WebhookService {
     }
   }
 
-  private async handleWalletFundsWithdrawn(event: PrivyWebhookEvent): Promise<void> {
-    const { userId, walletAddress, amount, tokenAddress, tokenSymbol } = event.data;
-    console.log('Funds withdrawn from wallet:', { 
-      userId, 
-      walletAddress, 
-      amount, 
-      tokenAddress, 
-      tokenSymbol 
-    });
-    // TODO: Update wallet balance in database, notify user of withdrawal
+  private async handleWalletFundsWithdrawn(event: PrivyWebhookEvent, svix_id: string): Promise<void> {
+    // Privy withdrawal webhook sample includes: amount, asset.address, recipient, sender, transaction_hash, wallet_id
+   
+    const eventData: any = event || {};
+
+    const walletId = eventData.wallet_id;
+    const amount = eventData.amount;
+    const tokenAddress = eventData.asset?.address;
+    const txHash = eventData.transaction_hash;
+    const sender = eventData.sender;
+    const recipient = eventData.recipient;
+
+    try {
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+
+      // Resolve user by wallet_id
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('user_id, email, lpt_balance, wallet_address')
+        .eq('wallet_id', walletId)
+        .maybeSingle();
+
+      if (userError) {
+        console.error('Error finding user by wallet_id for withdrawal:', userError);
+      }
+
+      const userId = user && (user as any).user_id ? (user as any).user_id : 'unknown';
+
+      // If this is an LPT withdrawal, update user's LPT balance
+      const lptTokenAddress = LIVEPEER_CONTRACTS.arbitrum.token?.toLowerCase();
+      let amountInEther = null as string | null;
+      if (tokenAddress && lptTokenAddress && tokenAddress.toLowerCase() === lptTokenAddress) {
+        try {
+          amountInEther = ethers.formatEther(amount);
+          const currentBalance = (user && (user as any).lpt_balance) || 0;
+          const newBalance = Math.max(0, Number(currentBalance) - parseFloat(amountInEther));
+
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ lpt_balance: newBalance })
+            .eq('user_id', userId);
+
+          if (updateError) {
+            console.error('Error updating user LPT balance after withdrawal:', updateError);
+          } else {
+            console.log(`Updated LPT balance for user ${userId}: -${amountInEther}, newBalance=${newBalance}`);
+          }
+        } catch (err) {
+          console.error('Failed to parse LPT withdrawal amount:', err);
+        }
+      }
+
+      // Create a transaction record for the withdrawal
+      const txPayload: any = {
+        user_id: userId,
+        transaction_hash: txHash || '',
+        transaction_type: 'withdrawal',
+        amount: amountInEther ?? (amount ? String(amount) : '0'),
+        token_address: tokenAddress,
+        token_symbol: lptTokenAddress && tokenAddress && tokenAddress.toLowerCase() === lptTokenAddress ? 'LPT' : undefined,
+        wallet_address: (user && (user as any).wallet_address) || sender || undefined,
+        wallet_id: walletId,
+        status: 'confirmed',
+        source: 'privy_webhook',
+      };
+
+      const transactionResult = await transactionService.createTransaction(txPayload);
+      if (!transactionResult.success) {
+        console.error('Error creating withdrawal transaction record:', transactionResult.error);
+      } else {
+        console.log('Withdrawal transaction recorded:', transactionResult.data?.id || txHash);
+      }
+
+      // Notify user by email if available
+      if (user && (user as any).email) {
+        try {
+          await sendMail({
+            to: (user as any).email,
+            subject: 'LPT Withdrawal processed',
+            text: `A withdrawal of ${txPayload.amount} ${txPayload.token_symbol || ''} was processed from your wallet.\n\nTransaction: ${txHash}\nRecipient: ${recipient}`,
+            html: `<p>A withdrawal of <b>${txPayload.amount} ${txPayload.token_symbol || ''}</b> was processed from your wallet.</p><p>Transaction: <code>${txHash}</code></p><p>Recipient: <code>${recipient}</code></p>`,
+          });
+        } catch (mailErr) {
+          console.error('Failed to send withdrawal notification email:', mailErr);
+        }
+      } else {
+        console.log('No user/email found for wallet_id', walletId, '; skipping email notification');
+      }
+    } catch (error) {
+      console.error('Error processing wallet funds withdrawn webhook:', error);
+    }
+  }
+
+  /**
+   * Handle Onramper webhook events
+   * Processes completed onramp transactions
+   */
+  async handleOnramperWebhook(event: OnramperWebhookEvent): Promise<void> {
+    try {
+      const statusDesc = ONRAMPER_STATUS_CODES[event.status] || 'unknown status';
+      console.log('Processing Onramper webhook:', {
+        orderId: event.orderId,
+        status: event.status,
+        statusDesc,
+        walletAddress: event.walletAddress,
+        fiatType: event.fiatType,
+        coinCode: event.coinCode,
+        network: event.network,
+        actualCryptoAmount: event.actualCryptoAmount,
+        actualFiatAmount: event.actualFiatAmount,
+        transactionHash: event.transactionHash,
+        eventType: event.eventType
+      });
+
+      // Check for duplicate webhook processing using orderId
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+
+      const { data: existingTransaction, error: duplicateError } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('transaction_hash', event.transactionHash)
+        .eq('source', 'onramp')
+        .maybeSingle();
+
+      if (duplicateError) {
+        console.error('Error checking for duplicate Onramper webhook:', duplicateError);
+        return;
+      }
+
+      if (existingTransaction) {
+        console.log('Onramper webhook already processed, skipping orderId:', event.orderId);
+        return;
+      }
+
+      // Log and branch on all status codes
+      switch (event.status) {
+        case -4: // amount mismatch
+        case -3: // bank and kyc name mismatch
+        case -2: // transaction abandoned
+        case -1: // transaction timed out
+        case 0:  // transaction created
+        case 1:  // referenceId claimed
+        case 2:  // deposit secured
+        case 11: // order placement initiated
+        case 12: // purchasing crypto
+        case 14: // withdrawal initiated
+          // Log and skip processing for these statuses
+          console.log(`Onramper status ${event.status}: ${statusDesc}. No transaction record created.`);
+          return;
+        case 3:
+        case 13:
+          // Crypto purchased (but not withdrawn yet)
+          console.log(`Onramper status ${event.status}: ${statusDesc}. Crypto purchased, not yet withdrawn.`);
+          // Optionally, you could record a pending transaction here
+          return;
+        case 4:
+        case 5:
+        case 15:
+        case 16:
+          // Withdrawal complete or webhook sent: process as successful deposit
+          break;
+        default:
+          console.log(`Onramper status ${event.status}: ${statusDesc}. Unhandled status.`);
+          return;
+      }
+
+      // Find user by wallet address (guard for undefined walletAddress)
+      const walletAddressSafe = event.walletAddress ? event.walletAddress.toLowerCase() : null;
+      let user: any = null;
+      let userError: any = null;
+      if (walletAddressSafe) {
+        // Use case-insensitive match to find wallet regardless of casing (addresses may be mixed-case)
+        // Use PostgREST filter with ILIKE which is case-insensitive
+        const resp = await supabase
+          .from('users')
+          .select('user_id, wallet_address, email')
+          .filter('wallet_address', 'ilike', walletAddressSafe)
+          .maybeSingle();
+        user = resp.data;
+        userError = resp.error;
+      }
+
+      if (userError) {
+        console.error('Error finding user by wallet address:', userError);
+        return;
+      }
+
+      if (!user) {
+        console.log('No user found with wallet address:', event.walletAddress);
+        // Still create a transaction record for tracking purposes
+      }
+
+      // Safe coin code and amount handling to avoid crashes when fields are missing
+      const coinCodeSafe = event.coinCode || 'unknown';
+      const tokenSymbolSafe = coinCodeSafe.toUpperCase();
+      const tokenAddressSafe = event.coinCode || (event.coinId ? String(event.coinId) : 'unknown');
+      const amountSafe = event.actualCryptoAmount != null ? String(event.actualCryptoAmount) : '0';
+
+      // Create transaction record - build payload and include metadata only when available
+      const txPayload: any = {
+        user_id: user?.user_id || 'unknown',
+        transaction_hash: event.transactionHash || '',
+        transaction_type: 'deposit',
+        amount: amountSafe,
+        token_address: tokenAddressSafe,
+        token_symbol: tokenSymbolSafe,
+        wallet_address: event.walletAddress || undefined,
+        created_at: event.createdAt || undefined,
+        order_id: event.orderId,
+        event_type: event.eventType,
+        coin_id: event.coinId,
+        fiat_type: event.fiatType,
+        fiat_amount: event.actualFiatAmount,
+        payment_type: event.paymentType,
+        actual_price: event.actualPrice,
+        reference_id: event.merchantRecognitionId,
+        chain_id: event.chainId,
+        network: event.network,
+        status: 'confirmed',
+        source: 'onramp'
+      };
+
+
+      const transactionResult = await transactionService.createTransaction(txPayload);
+
+      if (!transactionResult.success) {
+        console.error('Error creating Onramper transaction record:', transactionResult.error);
+        throw new Error(transactionResult.error);
+      }
+
+      console.log('Onramper transaction recorded successfully:', {
+        orderId: event.orderId,
+        userId: user?.user_id,
+        transactionHash: event.transactionHash,
+        amount: event.actualCryptoAmount,
+        coinCode: event.coinCode
+      });
+
+      // Optionally notify user
+      if (user?.email) {
+        try {
+          await sendMail({
+            to: user.email,
+            subject: 'Onramp deposit received',
+            text: `We received ${amountSafe} ${tokenSymbolSafe} to your wallet ${event.walletAddress}. Order: ${event.orderId}`,
+            html: `<p>We received <b>${amountSafe} ${tokenSymbolSafe}</b> to your wallet <code>${event.walletAddress}</code>.</p><p>Order: <code>${event.orderId}</code></p>`
+          });
+        } catch (mailErr) {
+          console.error('Failed to send onramp notification email:', mailErr);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error handling Onramper webhook:', error);
+      throw error;
+    }
   }
 }
 
 export const webhookService = new WebhookService();
+
