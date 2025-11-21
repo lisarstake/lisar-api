@@ -156,6 +156,120 @@ const router = Router();
 router.get('/balance',verifyAuth, (req, res) => walletController.getTokenBalance(req, res));
 
 /**
+ * POST /wallet/send-lpt
+ * Route to send LPT from a Privy-managed wallet to another address
+ */
+router.post('/send-lpt', verifyAuth, (req, res) => walletController.sendLPT(req, res));
+
+/**
+ * @swagger
+ * /wallet/send-lpt:
+ *   post:
+ *     summary: Send LPT from a Privy-managed wallet to another address
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - walletId
+ *               - walletAddress
+ *               - to
+ *               - amount
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *                 example: "z10zggo1fl16do8lk7w3rx7c"
+ *               walletAddress:
+ *                 type: string
+ *                 example: "0xabc..."
+ *               to:
+ *                 type: string
+ *                 example: "0xdef..."
+ *               amount:
+ *                 type: string
+ *                 example: "1.5"
+ *     responses:
+ *       200:
+ *         description: LPT transfer initiated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 txHash:
+ *                   type: string
+ *                   example: "0x5404075aae89bf843cb30d5e92362382ff4d9696d3e568e38426c4ab110e1e18"
+ *       400:
+ *         description: Bad request - missing or invalid fields
+ *       401:
+ *         description: Unauthorized - missing or invalid bearer token
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /wallet/approve-lpt:
+ *   post:
+ *     summary: Approve LPT allowance for a spender from a Privy-managed wallet
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - walletId
+ *               - walletAddress
+ *               - spender
+ *               - amount
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *                 example: "z10zggo1fl16do8lk7w3rx7c"
+ *               walletAddress:
+ *                 type: string
+ *                 example: "0xabc..."
+ *               spender:
+ *                 type: string
+ *                 example: "0xdef..."
+ *               amount:
+ *                 type: string
+ *                 example: "1000000000000000000"
+ *     responses:
+ *       200:
+ *         description: Approval transaction initiated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 txHash:
+ *                   type: string
+ *                   example: "0x5404075aae89bf843cb30d5e92362382ff4d9696d3e568e38426c4ab110e1e18"
+ *       400:
+ *         description: Bad request - missing or invalid fields
+ *       401:
+ *         description: Unauthorized - missing or invalid bearer token
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
  * GET /wallet/:walletId
  * Route to fetch a wallet by ID
  */

@@ -48,7 +48,7 @@ export interface OnramperWebhookEvent {
   coinId: number;
   fiatType: number;
   expectedPrice: number;
-  fiatAmount: number;
+  actualFiatAmount: number;
   paymentType: number;
   expectedCryptoAmount: number;
   actualPrice: number;

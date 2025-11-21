@@ -72,6 +72,37 @@ export class WalletController {
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
+
+  /**
+   * Send LPT tokens from a Privy-managed wallet to another address
+   */
+  async sendLPT(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, to, amount } = req.body as { walletId?: string; walletAddress?: string; to?: string; amount?: string };
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || !to || !amount) {
+        return res.status(400).json({ error: 'walletId, walletAddress, to and amount are required' });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({ error: 'Authorization required' });
+      }
+
+      const result = await walletService.sendLPT({ walletId, walletAddress: walletAddress as `0x${string}`, to: to as `0x${string}`, amount, authorizationToken });
+
+      if (!result.success) {
+        return res.status(500).json({ success: false, error: result.error });
+      }
+
+      return res.status(200).json({ success: true, txHash: result.txHash });
+    } catch (error: any) {
+      console.error('Error sending LPT:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+
 }
 
 export const walletController = new WalletController();

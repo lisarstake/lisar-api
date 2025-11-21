@@ -62,12 +62,6 @@ export class WebhookController {
 
       // Signature verified, process the webhook
       const event = req.body as OnramperWebhookEvent;
-      console.log('Received Onramper webhook event:', {
-        orderId: event.orderId,
-        status: event.status,
-        coinCode: event.coinCode,
-        walletAddress: event.walletAddress
-      });
       
       await webhookService.handleOnramperWebhook(event);
       
