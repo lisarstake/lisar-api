@@ -161,6 +161,7 @@ router.get('/balance',verifyAuth, (req, res) => walletController.getTokenBalance
  */
 router.post('/send-lpt', verifyAuth, (req, res) => walletController.sendLPT(req, res));
 
+
 /**
  * @swagger
  * /wallet/send-lpt:
@@ -214,6 +215,13 @@ router.post('/send-lpt', verifyAuth, (req, res) => walletController.sendLPT(req,
  *       500:
  *         description: Internal server error
  */
+
+
+/**
+ * POST /wallet/approve-lpt
+ * Route to approve LPT allowance for a spender
+ */
+router.post('/approve-lpt', verifyAuth, (req, res) => walletController.approveLPT(req, res));
 
 /**
  * @swagger
