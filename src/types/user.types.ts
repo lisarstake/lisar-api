@@ -4,6 +4,7 @@ export interface UserWithWallet {
     email: string;
     email_confirmed_at: string | null;
     user_metadata: any;
+    username?: string | null;
   };
   privyUser: {
     id: string;
