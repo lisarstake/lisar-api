@@ -102,6 +102,35 @@ export class WalletController {
     }
   }
 
+  /**
+   * Approve LPT allowance for a spender from a Privy-managed wallet
+   */
+  async approveLPT(req: Request, res: Response): Promise<Response> {
+    try {
+      const { walletId, walletAddress, spender, amount } = req.body as { walletId?: string; walletAddress?: string; spender?: string; amount?: string };
+      const authorizationToken = req.headers.authorization?.split(' ')[1];
+
+      if (!walletId || !walletAddress || !spender || !amount) {
+        return res.status(400).json({ error: 'walletId, walletAddress, spender and amount are required' });
+      }
+
+      if (!authorizationToken) {
+        return res.status(401).json({ error: 'Authorization required' });
+      }
+
+      const result = await walletService.approveLPT({ walletId, walletAddress: walletAddress as `0x${string}`, spender: spender as `0x${string}`, amount, authorizationToken });
+
+      if (!result.success) {
+        return res.status(500).json({ success: false, error: result.error });
+      }
+
+      return res.status(200).json({ success: true, txHash: result.txHash });
+    } catch (error: any) {
+      console.error('Error approving LPT:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
 
 }
 
