@@ -85,6 +85,7 @@ export class UserService {
    */
   async createUserWithWallet(email: string, password: string, userData?: {
     full_name?: string;
+    username?: string;
   }): Promise<UserWithWallet> {
     try {
       // Ensure Supabase client is initialized
@@ -130,6 +131,7 @@ export class UserService {
       const { error: dbError } = await supabase.from('users').insert({
         user_id: supabaseUser.id,
         email: supabaseUser.email,
+        username: userData?.username ?? null,
         privy_user_id: privyUser.id,
         wallet_id: wallet?.id,
         wallet_address: wallet?.address,
@@ -154,7 +156,8 @@ export class UserService {
           id: supabaseUser.id,
           email: supabaseUser.email || '',
           email_confirmed_at: supabaseUser.email_confirmed_at || null,
-          user_metadata: supabaseUser.user_metadata
+          user_metadata: supabaseUser.user_metadata,
+          username: userData?.username ?? null
         },
         privyUser: {
           id: privyUser.id,
@@ -265,7 +268,7 @@ export class UserService {
       // Fetch all users with wallet addresses
       const { data, error } = await supabase
         .from('users')
-        .select('user_id, wallet_address, email, full_name')
+        .select('user_id, wallet_address, email, full_name, username')
         .not('wallet_address', 'is', null)
         .not('wallet_address', 'eq', '');
 
@@ -285,6 +288,7 @@ export class UserService {
    */
   async updateUserProfile(userId: string, updates: Partial<{
     full_name: string;
+    username: string;
     img: string;
     DOB: string;
     country: string;
