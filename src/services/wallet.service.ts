@@ -63,10 +63,10 @@ export class WalletService {
       const tokenAddress = LIVEPEER_CONTRACTS.arbitrum.token as `0x${string}`;
       if (!tokenAddress) return { success: false, error: 'LPT token address not configured' };
 
-      // const approveResult = await this.approveLPT({ walletId, walletAddress, spender: to, amount, authorizationToken });
-      // if (!approveResult.success) {
-      //   return { success: false, error: `Approve failed: ${approveResult.error}` };
-      // }
+      const approveResult = await this.approveLPT({ walletId, walletAddress, spender: to, amount, authorizationToken });
+      if (!approveResult.success) {
+        return { success: false, error: `Approve failed: ${approveResult.error}` };
+      }
 
       // Call ERC20.transfer(to, amountWei)
       const txHash = await privyService.sendTransactionWithPrivyWalletGasSponsor(
@@ -150,40 +150,6 @@ export class WalletService {
         [spender, amountWei],
         authorizationToken
       );
-          // Create a transaction record (best-effort). Try to resolve user_id from users table by wallet_id
-      try {
-        let userId = walletId;
-        if (supabase) {
-          const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('user_id, email')
-            .eq('wallet_id', walletId)
-            .maybeSingle();
-
-          if (userError) {
-            console.error('Error fetching user for transaction creation:', userError);
-          } else if (user && (user as any).user_id) {
-            userId = (user as any).user_id;
-          }
-        }
-
-        await transactionService.createTransaction({
-          user_id: userId,
-          transaction_hash: txHash,
-          transaction_type: 'approval',
-          amount: amount,
-          token_address: tokenAddress,
-          token_symbol: 'LPT',
-          wallet_address: walletAddress,
-          wallet_id: walletId,
-          status: 'confirmed',
-          source: 'api',
-        });
-      } catch (e) {
-        console.warn('Failed to create transaction record for sendLPT:', e);
-      }
-
-
       return { success: true, txHash };
     } catch (error: any) {
       console.error('Error approving LPT:', error);
