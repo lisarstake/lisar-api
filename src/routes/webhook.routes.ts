@@ -105,5 +105,76 @@ router.post('/privy', webhookController.handlePrivyWebhook.bind(webhookControlle
  */
 router.post('/onramper', webhookController.handleOnramperWebhook.bind(webhookController));
 
+/**
+ * @swagger
+ * /webhooks/supabase:
+ *   post:
+ *     summary: Handle Supabase database webhooks
+ *     description: |
+ *       Generic endpoint for Supabase database webhooks. Handles various table events including:
+ *       - User creation (INSERT on users table)
+ *       - User updates (UPDATE on users table)
+ *       - Transaction events (INSERT/UPDATE on transactions table)
+ *       - Other database events as configured in Supabase
+ *     tags: [Webhooks]
+ *     security: []  # No auth required for webhooks
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [INSERT, UPDATE, DELETE]
+ *                 example: INSERT
+ *               table:
+ *                 type: string
+ *                 example: users
+ *               schema:
+ *                 type: string
+ *                 example: public
+ *               record:
+ *                 type: object
+ *                 description: The affected database record (new values for INSERT/UPDATE)
+ *               old_record:
+ *                 type: object
+ *                 nullable: true
+ *                 description: The previous record values (for UPDATE/DELETE)
+ *     responses:
+ *       200:
+ *         description: Webhook processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 received:
+ *                   type: boolean
+ *                   example: true
+ *       403:
+ *         description: Invalid webhook secret
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid webhook secret
+ *       500:
+ *         description: Error processing webhook
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Failed to process webhook
+ */
+router.post('/supabase', webhookController.handleSupabaseWebhook.bind(webhookController));
+
 export default router;
 

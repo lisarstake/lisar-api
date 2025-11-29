@@ -70,3 +70,11 @@ export interface OnramperWebhookEvent {
   network: string;
 }
 
+export interface SupabaseWebhookEvent {
+  type: 'INSERT' | 'UPDATE' | 'DELETE';
+  table: string;
+  schema: string;
+  record: any;
+  old_record?: any;
+}
+

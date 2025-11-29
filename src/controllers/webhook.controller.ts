@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
-import { PrivyWebhookEvent, OnramperWebhookEvent } from '../types/webhook.types';
+import { PrivyWebhookEvent, OnramperWebhookEvent, SupabaseWebhookEvent } from '../types/webhook.types';
 import crypto from 'crypto';
 import CryptoJS from 'crypto-js';
 
@@ -71,6 +71,33 @@ export class WebhookController {
       console.error('Onramper webhook handling error:', error);
       return res.status(500).json({ error: 'Failed to process webhook' });
     }
+  }
+
+  async handleSupabaseWebhook(req: Request, res: Response): Promise<Response> {
+    try {
+      // Validate webhook source with optional secret
+      const webhookSecret = req.headers['x-supabase-webhook-secret'] as string;
+      
+      if (process.env.SUPABASE_WEBHOOK_SECRET && webhookSecret !== process.env.SUPABASE_WEBHOOK_SECRET) {
+        console.warn('Invalid Supabase webhook secret');
+        return res.status(403).json({ error: 'Invalid webhook secret' });
+      }
+
+      const event = req.body as SupabaseWebhookEvent;
+      console.log('Received Supabase webhook:', { type: event.type, table: event.table });
+      
+      await webhookService.handleSupabaseWebhook(event);
+      
+      return res.status(200).json({ received: true });
+    } catch (error: any) {
+      console.error('Supabase webhook handling error:', error);
+      return res.status(500).json({ error: 'Failed to process webhook' });
+    }
+  }
+
+  // Deprecated: Use handleSupabaseWebhook instead
+  async handleSupabaseUserCreated(req: Request, res: Response): Promise<Response> {
+    return this.handleSupabaseWebhook(req, res);
   }
 }
 

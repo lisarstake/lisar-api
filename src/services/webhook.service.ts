@@ -1,12 +1,13 @@
 
-import { PrivyWebhookEvent, OnramperWebhookEvent } from '../types/webhook.types';
+import { PrivyWebhookEvent, OnramperWebhookEvent, SupabaseWebhookEvent } from '../types/webhook.types';
 import { delegationService } from '../services/delegation.service';
 import { livepeerService } from '../protocols/services/livepeer.service';
 import { supabase } from '../config/supabase';
-import { LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
+import { arbitrumOne, LIVEPEER_CONTRACTS } from '../protocols/config/livepeer.config';
 import { ethers } from 'ethers';
 import { transactionService } from './transaction.service';
 import { sendMail } from './email.service';
+import { topUpUserGas } from '../utils/gasTopUp';
 
 // Onramper status code mapping
 const ONRAMPER_STATUS_CODES: Record<number, string> = {
@@ -607,6 +608,184 @@ export class WebhookService {
       console.error('Error handling Onramper webhook:', error);
       throw error;
     }
+  }
+
+  /**
+   * Handle generic Supabase database webhooks
+   * Routes to specific handlers based on table and event type
+   */
+  async handleSupabaseWebhook(event: SupabaseWebhookEvent): Promise<void> {
+    try {
+      const { type, table, record } = event;
+
+      console.log('Processing Supabase webhook:', { type, table });
+
+      // Route to specific handlers based on table and event type
+      if (table === 'users' && type === 'INSERT') {
+        await this.handleSupabaseUserCreated(event);
+      } else if (table === 'users' && type === 'UPDATE') {
+        await this.handleSupabaseUserUpdated(event);
+      } else if (table === 'transactions' && type === 'INSERT') {
+        await this.handleSupabaseTransactionCreated(event);
+      } else {
+        console.log(`No handler for Supabase webhook: ${table}.${type}`);
+      }
+
+    } catch (error) {
+      console.error('Error handling Supabase webhook:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle Supabase webhook for new user creation
+   * Processes user onboarding tasks when a new user is added to the users table
+   */
+  private async handleSupabaseUserCreated(event: SupabaseWebhookEvent): Promise<void> {
+    try {
+      const { type, table, record } = event;
+      console.log('Handling Supabase user created event:',  table);
+
+      // Validate event type and table
+      if (type !== 'INSERT' || table !== 'users') {
+        console.log('Skipping non-INSERT or non-users event:', { type, table });
+        return;
+      }
+
+      const user = record;
+      
+      // 1. Send welcome email
+      if (user.email) {
+        try {
+          await sendMail({
+            to: user.email,
+            subject: 'Welcome to LISAR!',
+            text: `Welcome to LISAR! Your account has been successfully created.\n\nUser ID: ${user.user_id}\nWallet Address: ${user.wallet_address || 'Not set'}`,
+            html: `
+              <h2>Welcome to LISAR!</h2>
+              <p>Your account has been successfully created.</p>
+              <p><strong>User ID:</strong> <code>${user.user_id}</code></p>
+              ${user.username ? `<p><strong>Username:</strong> ${user.username}</p>` : ''}
+              <p><strong>Wallet Address:</strong> <code>${user.wallet_address || 'Not set'}</code></p>
+              <p>Start exploring our platform and manage your delegations!</p>
+            `
+          });
+          console.log('Welcome email sent to:', user.email);
+        } catch (emailError) {
+          console.error('Failed to send welcome email:', emailError);
+          // Don't throw - continue processing other tasks
+        }
+      }
+
+      // 2. Create welcome notification for new user
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+
+      try {
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: user.user_id,
+            type: 'welcome',
+            title: 'Welcome to LISAR',
+            message: 'Your account has been created successfully. Start by exploring our delegation features!',
+            is_read: false,
+            created_at: new Date().toISOString()
+          });
+
+        if (notificationError) {
+          console.error('Failed to create welcome notification:', notificationError);
+        } else {
+          console.log('Welcome notification created for user:', user.user_id);
+        }
+      } catch (notifError) {
+        console.error('Error creating notification:', notifError);
+      }
+
+
+      // 4. Top up ETH gas for new user wallet
+      if (user.wallet_address) {
+        try {
+          await topUpUserGas(user.wallet_address, user.user_id, user.email);
+        } catch (gasError) {
+          console.error('Failed to top up gas for new user:', gasError);
+          // Don't throw - gas top-up failure shouldn't block onboarding
+        }
+      } else {
+        console.log('No wallet address for user, skipping gas top-up');
+      }
+
+      // TODO: Add additional onboarding logic here:
+      // - Sync to external CRM or analytics service
+      // - Initialize user preferences
+      // - Track user registration metrics
+      // - Set up default notification settings
+
+    } catch (error) {
+      console.error('Error handling Supabase user created webhook:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle Supabase webhook for user updates
+   */
+  private async handleSupabaseUserUpdated(event: SupabaseWebhookEvent): Promise<void> {
+    try {
+      const { record, old_record } = event;
+      console.log('User updated:', {
+        userId: record.user_id,
+        changes: old_record ? this.getChangedFields(old_record, record) : 'N/A'
+      });
+
+      // TODO: Add logic for user updates
+      // - Send notification for important profile changes
+      // - Log security-relevant changes (email, 2FA status)
+      // - Sync updates to external services
+
+    } catch (error) {
+      console.error('Error handling Supabase user updated webhook:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle Supabase webhook for new transaction creation
+   */
+  private async handleSupabaseTransactionCreated(event: SupabaseWebhookEvent): Promise<void> {
+    try {
+      const { record } = event;
+      console.log('Transaction created:', {
+        transactionId: record.id,
+        userId: record.user_id,
+        type: record.transaction_type,
+        amount: record.amount
+      });
+
+      // TODO: Add logic for new transactions
+      // - Send notification to user
+      // - Update analytics/reporting
+      // - Trigger downstream workflows
+
+    } catch (error) {
+      console.error('Error handling Supabase transaction created webhook:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Helper to identify changed fields between old and new record
+   */
+  private getChangedFields(oldRecord: any, newRecord: any): string[] {
+    const changes: string[] = [];
+    for (const key in newRecord) {
+      if (oldRecord[key] !== newRecord[key]) {
+        changes.push(key);
+      }
+    }
+    return changes;
   }
 }
 
