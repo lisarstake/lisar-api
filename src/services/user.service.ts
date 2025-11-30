@@ -303,9 +303,30 @@ export class UserService {
         throw new Error('Supabase client is not initialized. Please check your configuration.');
       }
 
+      // Sanitize updates: convert empty strings to null, remove undefined values
+      const sanitizedUpdates: any = {};
+      
+      for (const [key, value] of Object.entries(updates)) {
+        // Skip undefined values
+        if (value === undefined) continue;
+        
+        // Convert empty strings to null
+        if (typeof value === 'string' && value.trim() === '') {
+          sanitizedUpdates[key] = null;
+        } else {
+          sanitizedUpdates[key] = value;
+        }
+      }
+
+      // If no valid updates after sanitization, return early
+      if (Object.keys(sanitizedUpdates).length === 0) {
+        console.log('No valid updates provided after sanitization');
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('users')
-        .update(updates)
+        .update(sanitizedUpdates)
         .eq('user_id', userId);
 
       if (error) {
