@@ -162,7 +162,7 @@ export class UserController {
     try {
       const { userId } = req.params;
       const updates = req.body;
-
+      console.log('Updating user profile for userId:', userId, 'with updates:', updates);
       if (!userId) {
         res.status(400).json({
           success: false,
