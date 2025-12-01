@@ -306,7 +306,7 @@ const router = Router();
  *                   type: string
  *                   example: Internal server error
  */
-router.get('/leaderboard', verifyAuth, (req, res) => earnerController.getEarnerLeaderboard(req, res));
+router.get('/leaderboard', (req, res) => earnerController.getEarnerLeaderboard(req, res));
 
 /**
  * @swagger
@@ -397,7 +397,7 @@ router.get('/leaderboard', verifyAuth, (req, res) => earnerController.getEarnerL
  *                   type: string
  *                   example: Internal server error
  */
-router.get('/top-by-rewards', verifyAuth, (req, res) => earnerController.getTopEarnersByRewards(req, res));
+router.get('/top-by-rewards', (req, res) => earnerController.getTopEarnersByRewards(req, res));
 
 /**
  * @swagger
@@ -460,6 +460,6 @@ router.get('/top-by-rewards', verifyAuth, (req, res) => earnerController.getTopE
  *                   type: string
  *                   example: Internal server error
  */
-router.get('/stats', verifyAuth, (req, res) => earnerController.getEarnerStats(req, res));
+router.get('/stats',  (req, res) => earnerController.getEarnerStats(req, res));
 
 export default router;
