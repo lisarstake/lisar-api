@@ -7,11 +7,24 @@ export class AdminDashboardService {
     try {
       if (!supabase) return { success: false, error: 'Database connection not available' };
 
-      // Total delegators (users with positive LPT balance)
-      const { count: totalDelegators } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .gt('lpt_balance', 0);
+      // Total delegators: count users with is_staker = true
+      let totalDelegators = 0;
+      try {
+        const { count } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_staker', true);
+
+        totalDelegators = count || 0;
+      } catch (err) {
+        console.error('Error counting stakers:', err);
+        // Fallback: count users with positive LPT balance if is_staker column doesn't exist
+        const { count: fallbackCount } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .gt('lpt_balance', 0);
+        totalDelegators = fallbackCount || 0;
+      }
 
       // Total LPT delegated (sum of confirmed delegation transactions)
       const { data: delegatedRows } = await supabase
