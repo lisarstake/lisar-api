@@ -7,6 +7,7 @@ import { orchestratorService } from '../services/orchestrator.service';
 import { GET_ACTIVE_TRANSCODERS_QUERY } from '../queries/subgraph.queries';
 import stakingUtils from '../utils/staking';
 import { sendMail } from '../services/email.service';
+import { EmailTemplates } from '../utils/emailTemplates';
 
 class DelegationController {
 
@@ -92,11 +93,22 @@ class DelegationController {
 
             // Send email notification for successful stake
             if (userEmail) {
+              const firstName = userEmail.split('@')[0];
+              const emailContent = EmailTemplates.transactionEmail({
+                firstName,
+                transactionType: 'delegation',
+                amount: amount.toString(),
+                tokenSymbol: 'LPT',
+                transactionHash: result.txHash,
+                timestamp: new Date().toISOString(),
+                walletAddress
+              });
+
               await sendMail({
                 to: userEmail,
-                subject: 'LPT Staked Successfully',
-                text: `You have successfully staked ${amount} LPT.\n\nTransaction Hash: ${result.txHash}`,
-                html: `<p>You have successfully staked <b>${amount} LPT</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html
               });
             }
           } catch (err) {
@@ -176,12 +188,22 @@ class DelegationController {
 
             // Send email notification for successful move stake
             if (userEmail) {
+              const firstName = userEmail.split('@')[0];
+              const emailContent = EmailTemplates.transactionEmail({
+                firstName,
+                transactionType: 'delegation',
+                amount: amount.toString(),
+                tokenSymbol: 'LPT',
+                transactionHash: result.txHash,
+                timestamp: new Date().toISOString(),
+                walletAddress
+              });
 
               await sendMail({
                 to: userEmail,
-                subject: 'LPT Stake Moved',
-                text: `You have successfully moved ${amount} LPT stake to a new orchestrator.\n\nTransaction Hash: ${result.txHash}`,
-                html: `<p>You have successfully moved <b>${amount} LPT</b> stake to a new orchestrator.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html
               });
             }
           } catch (err) {
@@ -312,11 +334,22 @@ class DelegationController {
 
             // Send email notification for successful unstake
             if (userEmail) {
+              const firstName = userEmail.split('@')[0];
+              const emailContent = EmailTemplates.transactionEmail({
+                firstName,
+                transactionType: 'withdrawal',
+                amount: amount.toString(),
+                tokenSymbol: 'LPT',
+                transactionHash: result.txHash,
+                timestamp: new Date().toISOString(),
+                walletAddress
+              });
+
               await sendMail({
                 to: userEmail,
-                subject: 'LPT Unstaked Successfully',
-                text: `You have successfully unstaked ${amount} LPT.\n\nTransaction Hash: ${result.txHash}`,
-                html: `<p>You have successfully unstaked <b>${amount} LPT</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html
               });
             }
           } catch (err) {
@@ -402,11 +435,22 @@ class DelegationController {
 
             // Send email notification for successful withdrawal
             if (userEmail) {
+              const firstName = userEmail.split('@')[0];
+              const emailContent = EmailTemplates.transactionEmail({
+                firstName,
+                transactionType: 'withdrawal',
+                amount: '0',
+                tokenSymbol: 'LPT',
+                transactionHash: result.txHash,
+                timestamp: new Date().toISOString(),
+                walletAddress
+              });
+
               await sendMail({
                 to: userEmail,
-                subject: 'LPT Stake Withdrawn',
-                text: `You have successfully withdrawn your LPT stake.\n\nTransaction Hash: ${result.txHash}`,
-                html: `<p>You have successfully withdrawn your <b>LPT stake</b>.</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html
               });
             }
           } catch (err) {
@@ -843,11 +887,22 @@ class DelegationController {
 
             // Send email notification for successful rebond
             if (userEmail) {
+              const firstName = userEmail.split('@')[0];
+              const emailContent = EmailTemplates.transactionEmail({
+                firstName,
+                transactionType: 'delegation',
+                amount: '0',
+                tokenSymbol: 'LPT',
+                transactionHash: result.txHash,
+                timestamp: new Date().toISOString(),
+                walletAddress
+              });
+
               await sendMail({
                 to: userEmail,
-                subject: 'LPT Rebonded Successfully',
-                text: `You have successfully rebonded your LPT (unbonding lock ${unbondingLockId}).\n\nTransaction Hash: ${result.txHash}`,
-                html: `<p>You have successfully rebonded your LPT (unbonding lock <b>${unbondingLockId}</b>).</p><p>Transaction Hash: <code>${result.txHash}</code></p>`
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html
               });
             }
           } catch (err) {

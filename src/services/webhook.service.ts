@@ -8,6 +8,7 @@ import { ethers } from 'ethers';
 import { transactionService } from './transaction.service';
 import { sendMail } from './email.service';
 import { topUpUserGas } from '../utils/gasTopUp';
+import { EmailTemplates } from '../utils/emailTemplates';
 
 // Onramper status code mapping
 const ONRAMPER_STATUS_CODES: Record<number, string> = {
@@ -270,7 +271,7 @@ export class WebhookService {
         // Find user by wallet_id instead of wallet_address
         const { data: user, error: userError } = await supabase
           .from('users')
-          .select('user_id, lpt_balance, email')
+          .select('user_id, lpt_balance, email, username')
           .eq('wallet_id', walletId)
           .maybeSingle();
 
@@ -331,11 +332,23 @@ export class WebhookService {
 
         // Send notification to user about successful deposit
         if (user.email) {
+          const firstName = user.username || user.email.split('@')[0];
+          
+          const emailContent = EmailTemplates.transactionEmail({
+            firstName,
+            transactionType: 'deposit',
+            amount: amountInEther,
+            tokenSymbol: 'LPT',
+            transactionHash,
+            timestamp: new Date().toISOString(),
+            walletAddress: recipientAddress
+          });
+
           await sendMail({
             to: user.email,
-            subject: 'LPT Deposit Received',
-            text: `You have received a deposit of ${amountInEther} LPT.\n\nTransaction Hash: ${transactionHash}`,
-            html: `<p>You have received a deposit of <b>${amountInEther} LPT</b>.</p><p>Transaction Hash: <code>${transactionHash}</code></p>`
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html
           });
         }
       } catch (error) {
@@ -425,11 +438,23 @@ export class WebhookService {
       // Notify user by email if available
       if (user && (user as any).email) {
         try {
+          const firstName = (user as any).username || (user as any).email.split('@')[0];
+          
+          const emailContent = EmailTemplates.transactionEmail({
+            firstName,
+            transactionType: 'withdrawal',
+            amount: txPayload.amount,
+            tokenSymbol: txPayload.token_symbol || 'LPT',
+            transactionHash: txHash,
+            timestamp: new Date().toISOString(),
+            walletAddress: recipient
+          });
+
           await sendMail({
             to: (user as any).email,
-            subject: 'LPT Withdrawal processed',
-            text: `A withdrawal of ${txPayload.amount} ${txPayload.token_symbol || ''} was processed from your wallet.\n\nTransaction: ${txHash}\nRecipient: ${recipient}`,
-            html: `<p>A withdrawal of <b>${txPayload.amount} ${txPayload.token_symbol || ''}</b> was processed from your wallet.</p><p>Transaction: <code>${txHash}</code></p><p>Recipient: <code>${recipient}</code></p>`,
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html
           });
         } catch (mailErr) {
           console.error('Failed to send withdrawal notification email:', mailErr);
@@ -593,11 +618,22 @@ export class WebhookService {
       // Optionally notify user
       if (user?.email) {
         try {
+          const firstName = user.email.split('@')[0];
+          const emailContent = EmailTemplates.transactionEmail({
+            firstName,
+            transactionType: 'deposit',
+            amount: amountSafe,
+            tokenSymbol: tokenSymbolSafe,
+            transactionHash: event.transactionHash,
+            timestamp: event.createdAt || new Date().toISOString(),
+            walletAddress: event.walletAddress
+          });
+
           await sendMail({
             to: user.email,
-            subject: 'Onramp deposit received',
-            text: `We received ${amountSafe} ${tokenSymbolSafe} to your wallet ${event.walletAddress}. Order: ${event.orderId}`,
-            html: `<p>We received <b>${amountSafe} ${tokenSymbolSafe}</b> to your wallet <code>${event.walletAddress}</code>.</p><p>Order: <code>${event.orderId}</code></p>`
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html
           });
         } catch (mailErr) {
           console.error('Failed to send onramp notification email:', mailErr);
@@ -657,19 +693,23 @@ export class WebhookService {
       // 1. Send welcome email
       if (user.email) {
         try {
+          // Extract first name from email or username
+          const firstName = user.username || user.email.split('@')[0];
+          
+          const emailContent = EmailTemplates.welcomeEmail({
+            firstName,
+            userId: user.user_id,
+            walletAddress: user.wallet_address,
+            username: user.username
+          });
+
           await sendMail({
             to: user.email,
-            subject: 'Welcome to LISAR!',
-            text: `Welcome to LISAR! Your account has been successfully created.\n\nUser ID: ${user.user_id}\nWallet Address: ${user.wallet_address || 'Not set'}`,
-            html: `
-              <h2>Welcome to LISAR!</h2>
-              <p>Your account has been successfully created.</p>
-              <p><strong>User ID:</strong> <code>${user.user_id}</code></p>
-              ${user.username ? `<p><strong>Username:</strong> ${user.username}</p>` : ''}
-              <p><strong>Wallet Address:</strong> <code>${user.wallet_address || 'Not set'}</code></p>
-              <p>Start exploring our platform and manage your delegations!</p>
-            `
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html
           });
+          
           console.log('Welcome email sent to:', user.email);
         } catch (emailError) {
           console.error('Failed to send welcome email:', emailError);

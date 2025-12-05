@@ -5,50 +5,77 @@ import { privyService } from '../../integrations/privy/privy.service';
 export class AdminDashboardService {
   async getSummary(): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-      if (!supabase) return { success: false, error: 'Database connection not available' };
+      console.log('🔍 [Dashboard] Starting getSummary...');
+      
+      if (!supabase) {
+        console.error('❌ [Dashboard] Supabase not available');
+        return { success: false, error: 'Database connection not available' };
+      }
+
+      console.log('✅ [Dashboard] Supabase connected');
 
       // Total delegators: prefer fast DB count using is_staker (added by migration). Fallback to scanning users if column missing.
       let totalDelegators = 0;
       try {
-        const { data: stakerCountRes, error: stakerCountErr } = await supabase
+        console.log('📊 [Dashboard] Fetching staker count with is_staker...');
+        const { count, error: stakerCountErr } = await supabase
           .from('users')
-          .select('is_staker', { count: 'exact', head: true })
+          .select('*', { count: 'exact', head: true })
           .eq('is_staker', true);
 
         if (!stakerCountErr) {
-          totalDelegators = (stakerCountRes as any)?.count || 0;
+          totalDelegators = count || 0;
+          console.log('✅ [Dashboard] is_staker count:', totalDelegators);
         } else {
+          console.warn('⚠️ [Dashboard] is_staker error:', stakerCountErr);
           // Fallback for older schemas: count users with non-null wallet_address
           const { count: fallbackCount } = await supabase
             .from('users')
             .select('*', { count: 'exact', head: true })
             .not('wallet_address', 'is', null);
           totalDelegators = fallbackCount || 0;
+          console.log('✅ [Dashboard] Fallback count (wallet_address):', totalDelegators);
         }
       } catch (err) {
-        console.error('Error reading is_staker from DB, falling back to full scan:', err);
+        console.error('❌ [Dashboard] Error reading is_staker from DB, falling back:', err);
         const { count: fallbackCount } = await supabase
           .from('users')
           .select('*', { count: 'exact', head: true })
           .not('wallet_address', 'is', null);
         totalDelegators = fallbackCount || 0;
+        console.log('✅ [Dashboard] Catch fallback count:', totalDelegators);
       }
 
       // Total LPT delegated (sum of confirmed delegation transactions)
-      const { data: delegatedRows } = await supabase
+      console.log('📊 [Dashboard] Fetching delegation transactions...');
+      const { data: delegatedRows, error: delegationError } = await supabase
         .from('transactions')
         .select('amount')
         .eq('transaction_type', 'delegation')
         .eq('status', 'confirmed');
 
+      if (delegationError) {
+        console.error('❌ [Dashboard] Delegation fetch error:', delegationError);
+      } else {
+        console.log('✅ [Dashboard] Found delegation transactions:', delegatedRows?.length || 0);
+      }
+
       const totalLptDelegated = delegatedRows?.reduce((sum: number, r: any) => sum + parseFloat(r.amount || '0'), 0) || 0;
+      console.log('📈 [Dashboard] Total LPT delegated:', totalLptDelegated);
 
       // Total NGN converted — best-effort: sum of transactions with source onramp (if available)
-      const { data: onrampRows } = await supabase
+      console.log('📊 [Dashboard] Fetching onramp transactions...');
+      const { data: onrampRows, error: onrampError } = await supabase
         .from('transactions')
         .select('amount, metadata')
         .eq('source', 'onramp')
         .eq('status', 'confirmed');
+
+      if (onrampError) {
+        console.error('❌ [Dashboard] Onramp fetch error:', onrampError);
+      } else {
+        console.log('✅ [Dashboard] Found onramp transactions:', onrampRows?.length || 0);
+      }
 
       // If your onramp stores fiat amounts in metadata, extract it; otherwise return null
       let totalNgnConverted = 0;
@@ -60,30 +87,40 @@ export class AdminDashboardService {
           if (fiat) totalNgnConverted += parseFloat(fiat as any) || 0;
         }
       }
-
-
+      console.log('📈 [Dashboard] Total NGN converted:', totalNgnConverted);
 
       // Validators counts
+      console.log('📊 [Dashboard] Fetching validators count...');
       let totalValidators = 0;
       try {
-        const { count: vTotal } = await supabase.from('validators').select('*', { count: 'exact', head: true });
-        totalValidators = vTotal || 0;
+        const { count: vTotal, error: vError } = await supabase.from('validators').select('*', { count: 'exact', head: true });
+        if (vError) {
+          console.warn('⚠️ [Dashboard] Validators fetch error:', vError);
+        } else {
+          totalValidators = vTotal || 0;
+          console.log('✅ [Dashboard] Total validators:', totalValidators);
+        }
       } catch (e) {
-        console.warn('Could not fetch total validators count:', e);
+        console.warn('❌ [Dashboard] Could not fetch total validators count:', e);
       }
+
+      const summaryData = {
+        totalDelegators: totalDelegators || 0,
+        totalNgNConverted: totalNgnConverted || 0,
+        totalLptDelegated,
+        totalValidators,
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ [Dashboard] Summary complete:', summaryData);
 
       return {
         success: true,
-        data: {
-          totalDelegators: totalDelegators || 0,
-          totalNgNConverted: totalNgnConverted || 0,
-          totalLptDelegated,
-          totalValidators,
-          lastUpdated: new Date().toISOString()
-        }
+        data: summaryData
       };
     } catch (error: any) {
-      console.error('Error in AdminDashboardService.getSummary:', error);
+      console.error('❌ [Dashboard] Fatal error in getSummary:', error);
+      console.error('Stack trace:', error.stack);
       return { success: false, error: 'Failed to fetch dashboard summary' };
     }
   }
