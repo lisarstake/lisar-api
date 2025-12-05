@@ -46,16 +46,16 @@ export class EmailTemplates {
       background-color: #ffffff;
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-color: #000000;
       padding: 40px 30px;
       text-align: center;
     }
-    .logo {
-      font-size: 32px;
-      font-weight: 700;
-      color: #ffffff;
-      letter-spacing: 2px;
-      margin: 0;
+    .logo-container {
+      display: inline-block;
+    }
+    .logo-svg {
+      width: 120px;
+      height: auto;
     }
     .content {
       padding: 40px 30px;
@@ -70,7 +70,7 @@ export class EmailTemplates {
     .tagline {
       font-size: 18px;
       font-weight: 500;
-      color: #667eea;
+      color: #C7EF6B;
       margin-bottom: 25px;
     }
     .section {
@@ -83,8 +83,8 @@ export class EmailTemplates {
       margin-bottom: 15px;
     }
     .cta-box {
-      background-color: #f8f9ff;
-      border-left: 4px solid #667eea;
+      background-color: #f8fff0;
+      border-left: 4px solid #C7EF6B;
       padding: 20px;
       margin: 25px 0;
       border-radius: 4px;
@@ -98,7 +98,7 @@ export class EmailTemplates {
       color: #2d3748;
     }
     .cta-link {
-      color: #667eea;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
     }
@@ -118,7 +118,7 @@ export class EmailTemplates {
       margin-bottom: 10px;
     }
     .timeline {
-      background-color: #f8f9ff;
+      background-color: #f8fff0;
       padding: 20px;
       margin: 20px 0;
       border-radius: 8px;
@@ -126,21 +126,24 @@ export class EmailTemplates {
     .timeline-item {
       margin-bottom: 12px;
       padding-left: 15px;
-      border-left: 2px solid #667eea;
+      border-left: 2px solid #C7EF6B;
       color: #2d3748;
     }
     .button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #ffffff;
+      background-color: #C7EF6B;
+      color: #000000;
       padding: 14px 32px;
       text-decoration: none;
       border-radius: 6px;
       font-weight: 600;
       margin: 20px 0;
     }
+    .button:hover {
+      background-color: #b5db59;
+    }
     .footer {
-      background-color: #1a1a1a;
+      background-color: #000000;
       color: #ffffff;
       padding: 30px;
       text-align: center;
@@ -158,7 +161,7 @@ export class EmailTemplates {
       border-radius: 3px;
       font-family: 'Courier New', monospace;
       font-size: 13px;
-      color: #667eea;
+      color: #000000;
     }
     @media only screen and (max-width: 600px) {
       .content {
@@ -173,14 +176,31 @@ export class EmailTemplates {
 <body>
   <div class="email-container">
     <div class="header">
-      <h1 class="logo">LISAR</h1>
+      <div class="logo-container">
+        <svg class="logo-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- LISAR Logo - Lime green rays on black background -->
+          <g transform="translate(0, 0)">
+            <!-- Ray 1 (leftmost, longest) -->
+            <path d="M 0 100 L 10 0 Q 15 0 25 0 L 35 100 Q 30 100 25 100 Q 20 100 15 100 Z" fill="#C7EF6B" opacity="0.9"/>
+            
+            <!-- Ray 2 -->
+            <path d="M 40 100 L 55 20 Q 60 20 70 20 L 75 100 Q 70 100 65 100 Q 60 100 55 100 Z" fill="#C7EF6B" opacity="0.85"/>
+            
+            <!-- Ray 3 -->
+            <path d="M 80 100 L 90 35 Q 95 35 105 35 L 110 100 Q 105 100 100 100 Q 95 100 90 100 Z" fill="#C7EF6B" opacity="0.8"/>
+            
+            <!-- Ray 4 (rightmost) -->
+            <path d="M 115 100 L 122 50 Q 127 50 137 50 L 142 100 Q 137 100 132 100 Q 127 100 122 100 Z" fill="#C7EF6B" opacity="0.75"/>
+          </g>
+        </svg>
+      </div>
     </div>
     <div class="content">
       ${content}
     </div>
     <div class="footer">
       <p>If you need help at any point, simply reply to this email. The team sees every message.</p>
-      <p class="footer-signature">— The LISAR Team</p>
+      <p class="footer-signature" style="color: #C7EF6B;">— The LISAR Team</p>
       <p style="font-size: 12px; color: #718096; margin-top: 20px;">
         This email was sent to you because you created an account on LISAR.
       </p>
@@ -327,11 +347,16 @@ Let's help your money start working immediately.
     const htmlContent = `
       <div style="max-width: 600px; margin: 0 auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <!-- Header -->
-        <div style="background-color: #1a1d29; padding: 24px; border-radius: 12px 12px 0 0;">
+        <div style="background-color: #000000; padding: 24px; border-radius: 12px 12px 0 0;">
           <div style="display: flex; align-items: center;">
-            <div style="background-color: #2d3142; border-radius: 8px; padding: 8px 12px; margin-right: 12px;">
-              <span style="color: #ffffff; font-size: 20px; font-weight: 700;">LISAR</span>
-            </div>
+            <svg width="80" height="40" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+              <g transform="translate(0, 0)">
+                <path d="M 0 100 L 10 0 Q 15 0 25 0 L 35 100 Q 30 100 25 100 Q 20 100 15 100 Z" fill="#C7EF6B" opacity="0.9"/>
+                <path d="M 40 100 L 55 20 Q 60 20 70 20 L 75 100 Q 70 100 65 100 Q 60 100 55 100 Z" fill="#C7EF6B" opacity="0.85"/>
+                <path d="M 80 100 L 90 35 Q 95 35 105 35 L 110 100 Q 105 100 100 100 Q 95 100 90 100 Z" fill="#C7EF6B" opacity="0.8"/>
+                <path d="M 115 100 L 122 50 Q 127 50 137 50 L 142 100 Q 137 100 132 100 Q 127 100 122 100 Z" fill="#C7EF6B" opacity="0.75"/>
+              </g>
+            </svg>
           </div>
         </div>
 
@@ -381,7 +406,7 @@ Let's help your money start working immediately.
           ${transactionHash ? `
           <div style="text-align: center; margin: 32px 0;">
             <a href="https://arbiscan.io/tx/${transactionHash}" 
-               style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">
+               style="display: inline-block; background-color: #C7EF6B; color: #000000; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">
               View on Arbiscan →
             </a>
           </div>
@@ -391,16 +416,16 @@ Let's help your money start working immediately.
           <div style="background-color: #fff9e6; border-left: 4px solid #f6ad55; padding: 16px 20px; border-radius: 4px; margin-top: 32px;">
             <p style="color: #744210; font-size: 14px; margin: 0; line-height: 1.6;">
               If you didn't initiate this transaction, please contact our support team immediately via email 
-              <a href="mailto:support@lisar.io" style="color: #667eea; text-decoration: none; font-weight: 600;">support@lisar.io</a>
+              <a href="mailto:support@lisar.io" style="color: #000000; text-decoration: none; font-weight: 600;">support@lisar.io</a>
             </p>
           </div>
         </div>
 
         <!-- Footer -->
-        <div style="background-color: #1a1d29; padding: 32px; text-align: center; border-radius: 0 0 12px 12px;">
+        <div style="background-color: #000000; padding: 32px; text-align: center; border-radius: 0 0 12px 12px;">
           <p style="color: #a0aec0; font-size: 14px; margin: 0 0 8px 0;">
             Need help? Reply to this email or contact us at 
-            <a href="mailto:support@lisar.io" style="color: #667eea; text-decoration: none;">support@lisar.io</a>
+            <a href="mailto:support@lisar.io" style="color: #C7EF6B; text-decoration: none;">support@lisar.io</a>
           </p>
           <p style="color: #718096; font-size: 13px; margin: 16px 0 0 0;">
             © ${new Date().getFullYear()} LISAR. All rights reserved.
