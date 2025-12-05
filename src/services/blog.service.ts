@@ -42,7 +42,7 @@ export class BlogService {
       query = query.range(offset, offset + limit - 1);
 
       const { data, error, count } = await query;
-       console.log(data);
+      
       if (error) {
         console.error('Error fetching blog posts:', error);
         return { success: false, error: error.message };
