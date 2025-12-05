@@ -3,6 +3,7 @@ import userRoutes from './user.routes';
 import transactionRoutes from './transaction.routes';
 import jobRoutes from './job.routes';
 import onramperRoutes from './onramper.routes';
+import blogRoutes from './blog.routes';
 import { adminAuth } from '../middleware/admin.middleware';
 import { 
   adminLogin, 
@@ -436,6 +437,9 @@ router.use('/jobs', jobRoutes);
 
 // Mount onramper management routes
 router.use('/onramper', onramperRoutes);
+
+// Mount blog/publications management routes (admin)
+router.use('/publications', adminAuth, blogRoutes);
 
 export default router;
 
