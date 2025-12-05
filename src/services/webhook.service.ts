@@ -693,8 +693,8 @@ export class WebhookService {
       // 1. Send welcome email
       if (user.email) {
         try {
-          // Extract first name from email or username
-          const firstName = user.username || user.email.split('@')[0];
+          // Extract first name from full_name, username, or email
+          const firstName = user?.full_name?.split(' ')[0] || user.username || user.email.split('@')[0];
           
           const emailContent = EmailTemplates.welcomeEmail({
             firstName,
