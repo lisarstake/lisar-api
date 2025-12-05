@@ -14,6 +14,7 @@ import adminRoutes from '../admin/routes';
 import protocolRoutes from './protocol.routes';
 import earnerRoutes from './earner.routes';
 import notificationRoutes from './notification.routes';
+import blogRoutes from './blog.routes';
 
 const router = Router();
 
@@ -42,6 +43,9 @@ router.use('/transactions', transactionRoutes);
 
 // Mount notification routes
 router.use('/notifications', notificationRoutes);
+
+// Mount blog routes (public)
+router.use('/blog', blogRoutes);
 
 // Mount admin routes
 router.use('/admin', adminRoutes);

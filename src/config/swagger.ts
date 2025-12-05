@@ -149,6 +149,195 @@ const swaggerDefinition = {
             example: 'Operation completed successfully'
           }
         }
+      },
+      BlogAuthor: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Author name',
+            example: 'LISAR Team'
+          },
+          avatar: {
+            type: 'string',
+            description: 'Author avatar URL',
+            example: 'https://example.com/avatar.jpg',
+            nullable: true
+          },
+          role: {
+            type: 'string',
+            description: 'Author role',
+            example: 'Content Writer',
+            nullable: true
+          }
+        },
+        required: ['name']
+      },
+      BlogPost: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            format: 'uuid',
+            description: 'Blog post ID',
+            example: '123e4567-e89b-12d3-a456-426614174000'
+          },
+          title: {
+            type: 'string',
+            description: 'Blog post title',
+            example: 'Getting Started with Livepeer Staking'
+          },
+          slug: {
+            type: 'string',
+            description: 'URL-friendly slug',
+            example: 'getting-started-with-livepeer-staking'
+          },
+          excerpt: {
+            type: 'string',
+            description: 'Short summary of the post',
+            example: 'Learn how to start staking LPT tokens and earn rewards'
+          },
+          content: {
+            type: 'string',
+            description: 'Full post content in markdown',
+            example: '# Introduction\n\nThis is a comprehensive guide...'
+          },
+          author: {
+            $ref: '#/components/schemas/BlogAuthor'
+          },
+          cover_image: {
+            type: 'string',
+            description: 'Cover image URL',
+            example: 'https://example.com/cover.jpg'
+          },
+          category: {
+            type: 'string',
+            description: 'Post category',
+            example: 'Tutorials'
+          },
+          tags: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'Post tags',
+            example: ['staking', 'tutorial', 'defi']
+          },
+          published_at: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Publication timestamp',
+            example: '2025-12-04T10:00:00Z',
+            nullable: true
+          },
+          reading_time: {
+            type: 'integer',
+            description: 'Estimated reading time in minutes',
+            example: 5
+          },
+          featured: {
+            type: 'boolean',
+            description: 'Whether post is featured',
+            example: false
+          },
+          status: {
+            type: 'string',
+            enum: ['draft', 'published', 'archived'],
+            description: 'Post status (admin only)',
+            example: 'published'
+          },
+          views: {
+            type: 'integer',
+            description: 'View count',
+            example: 1250
+          },
+          created_at: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Creation timestamp',
+            example: '2025-12-04T09:00:00Z'
+          },
+          updated_at: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Last update timestamp',
+            example: '2025-12-04T09:30:00Z'
+          }
+        },
+        required: ['title', 'slug', 'excerpt', 'content', 'author', 'cover_image', 'category']
+      },
+      BlogCategory: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            format: 'uuid',
+            description: 'Category ID',
+            example: '123e4567-e89b-12d3-a456-426614174000'
+          },
+          name: {
+            type: 'string',
+            description: 'Category name',
+            example: 'Technology'
+          },
+          slug: {
+            type: 'string',
+            description: 'URL-friendly slug',
+            example: 'technology'
+          },
+          description: {
+            type: 'string',
+            description: 'Category description',
+            example: 'Latest tech trends and innovations',
+            nullable: true
+          },
+          created_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2025-12-04T09:00:00Z'
+          },
+          updated_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2025-12-04T09:00:00Z'
+          }
+        },
+        required: ['name', 'slug']
+      },
+      BlogStats: {
+        type: 'object',
+        properties: {
+          totalPosts: {
+            type: 'integer',
+            description: 'Total number of posts',
+            example: 25
+          },
+          publishedPosts: {
+            type: 'integer',
+            description: 'Number of published posts',
+            example: 20
+          },
+          draftPosts: {
+            type: 'integer',
+            description: 'Number of draft posts',
+            example: 3
+          },
+          archivedPosts: {
+            type: 'integer',
+            description: 'Number of archived posts',
+            example: 2
+          },
+          featuredPosts: {
+            type: 'integer',
+            description: 'Number of featured posts',
+            example: 5
+          },
+          totalViews: {
+            type: 'integer',
+            description: 'Total views across all posts',
+            example: 15000
+          }
+        }
       }
     }
   }
