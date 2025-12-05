@@ -9,7 +9,7 @@ import { sendMail } from '../services/email.service';
 export async function topUpUserGas(walletAddress: string, userId: string, userEmail?: string): Promise<void> {
   try {
     // Configuration
-    const GAS_TOP_UP_AMOUNT = process.env.GAS_TOP_UP_AMOUNT || '0.0001'; // Default 0.0001 ETH
+    const GAS_TOP_UP_AMOUNT = process.env.GAS_TOP_UP_AMOUNT || '0.0000000001'; // Default 0.0001 ETH
     const FUNDER_PRIVATE_KEY = process.env.GAS_TOPUP_PRIVATE_KEY;
     const RPC_URL = 'https://arb1.arbitrum.io/rpc';
 
