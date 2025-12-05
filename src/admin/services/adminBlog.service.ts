@@ -16,6 +16,9 @@ export class AdminBlogService {
    */
   async getPosts(params: AdminBlogQueryParams): Promise<{ success: boolean; data?: BlogPost[]; total?: number; error?: string }> {
     try {
+      console.log('=== AdminBlogService.getPosts DEBUG ===');
+      console.log('Input params:', JSON.stringify(params, null, 2));
+      
       if (!supabase) {
         return { success: false, error: 'Database connection not available' };
       }
@@ -26,43 +29,55 @@ export class AdminBlogService {
 
       // Apply filters
       if (params.status) {
+        console.log('Applying status filter:', params.status);
         query = query.eq('status', params.status);
       }
 
       if (params.category) {
+        console.log('Applying category filter:', params.category);
         query = query.eq('category', params.category);
       }
 
       if (params.tag) {
+        console.log('Applying tag filter:', params.tag);
         query = query.contains('tags', [params.tag]);
       }
 
       if (params.featured !== undefined) {
+        console.log('Applying featured filter:', params.featured);
         query = query.eq('featured', params.featured);
       }
 
       if (params.search) {
+        console.log('Applying search filter:', params.search);
         query = query.or(`title.ilike.%${params.search}%,excerpt.ilike.%${params.search}%,content.ilike.%${params.search}%`);
       }
 
       // Apply sorting
       const sortBy = params.sortBy || 'created_at';
       const sortOrder = params.sortOrder || 'desc';
+      console.log('Sorting by:', sortBy, 'order:', sortOrder);
       query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
       // Apply pagination
       const page = params.page || 1;
       const limit = params.limit || 10;
       const offset = (page - 1) * limit;
+      console.log('Pagination - page:', page, 'limit:', limit, 'offset:', offset);
+      console.log('Range will be:', offset, 'to', offset + limit - 1);
       query = query.range(offset, offset + limit - 1);
 
       const { data, error, count } = await query;
+
+      console.log('Query result - count:', count, 'data length:', data?.length);
+      console.log('Data:', JSON.stringify(data, null, 2));
 
       if (error) {
         console.error('Error fetching blog posts (admin):', error);
         return { success: false, error: error.message };
       }
 
+      console.log('=== END DEBUG ===');
       return {
         success: true,
         data: data as BlogPost[],

@@ -10,6 +10,9 @@ export class AdminBlogController {
    */
   async getPosts(req: Request, res: Response): Promise<void> {
     try {
+      console.log('=== AdminBlogController.getPosts DEBUG ===');
+      console.log('Raw query params:', req.query);
+      
       const params: AdminBlogQueryParams = {
         page: req.query.page ? parseInt(req.query.page as string) : undefined,
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
@@ -17,12 +20,16 @@ export class AdminBlogController {
         tag: req.query.tag as string,
         search: req.query.search as string,
         status: req.query.status as 'draft' | 'published' | 'archived',
-        featured: req.query.featured === 'true',
+        featured: req.query.featured === 'true' ? true : req.query.featured === 'false' ? false : undefined,
         sortBy: req.query.sortBy as any,
         sortOrder: req.query.sortOrder as 'asc' | 'desc'
       };
 
+      console.log('Parsed params:', JSON.stringify(params, null, 2));
+
       const result = await adminBlogService.getPosts(params);
+
+      console.log('Service result - success:', result.success, 'total:', result.total, 'data length:', result.data?.length);
 
       if (!result.success) {
         res.status(400).json({
@@ -34,6 +41,9 @@ export class AdminBlogController {
 
       const page = params.page || 1;
       const limit = params.limit || 10;
+
+      console.log('Response - page:', page, 'limit:', limit, 'total:', result.total);
+      console.log('=== END CONTROLLER DEBUG ===');
 
       res.json({
         success: true,

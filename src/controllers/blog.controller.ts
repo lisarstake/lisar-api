@@ -14,7 +14,7 @@ export class BlogController {
         category: req.query.category as string,
         tag: req.query.tag as string,
         search: req.query.search as string,
-        featured: req.query.featured === 'true',
+        featured: req.query.featured === 'true' ? true : req.query.featured === 'false' ? false : undefined,
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
         offset: req.query.offset ? parseInt(req.query.offset as string) : undefined
       };
